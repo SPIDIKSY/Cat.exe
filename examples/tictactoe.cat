@@ -1,0 +1,81 @@
+// Крестики-нолики: ты — X, котик — O. Поле: массив из 9 клеток (0 пусто, 1 — X, 2 — O).
+
+purr mark(v: u8) -> str {
+    sniff v == 1 { bring "X"; }
+    sniff v == 2 { bring "O"; }
+    bring ".";
+}
+
+purr show(b: [u8]) {
+    yarn three: u32 = 3;
+    prowl r among 0..three {
+        yarn row = "";
+        prowl c among 0..three { row = row + mark(b[r * 3 + c]) + " "; }
+        meow(row);
+    }
+}
+
+// кто выиграл: 0 — никто, 1 — X, 2 — O
+purr winner(b: [u8]) -> u8 {
+    yarn lines: [[u32]] = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
+    prowl k among 0..stretch(lines) {
+        yarn l = lines[k];
+        yarn a = b[l[0]];
+        sniff a != 0 && a == b[l[1]] && a == b[l[2]] { bring a; }
+    }
+    bring 0;
+}
+
+purr full(b: [u8]) -> bool {
+    prowl i among 0..stretch(b) { sniff b[i] == 0 { bring no; } }
+    bring yes;
+}
+
+// клетка, куда who может пойти и выиграть; 9 — такой нет
+purr find(b: [u8], who: u8) -> u32 {
+    prowl i among 0..stretch(b) {
+        sniff b[i] == 0 {
+            b[i] = who;
+            yarn w = winner(b);
+            b[i] = 0;
+            sniff w == who { bring i; }
+        }
+    }
+    bring 9;
+}
+
+purr cat_move(b: [u8]) -> u32 {
+    yarn m = find(b, 2);            // выиграть самому
+    sniff m < 9 { bring m; }
+    m = find(b, 1);                 // не дать выиграть тебе
+    sniff m < 9 { bring m; }
+    sniff b[4] == 0 { bring 4; }    // центр
+    chase yes {
+        yarn c = roll(9);
+        sniff b[c] == 0 { bring c; }
+    }
+    bring 0;
+}
+
+purr main() {
+    yarn b = [0 like u8; 9];
+    meow("Крестики-нолики! Ты - X, котик - O. Клетки 1..9 слева направо, сверху вниз.");
+    chase yes {
+        show(b);
+        yarn move: u32 = 9;
+        chase move == 9 {
+            mew("Твой ход (1-9): ");
+            yarn n = ask();
+            sniff T heard() || n < 1 || n > 9 { meow("Нужно число от 1 до 9."); hop; }
+            yarn c = (n - 1) like u32;
+            sniff b[c] != 0 { meow("Клетка занята."); hop; }
+            move = c;
+        }
+        b[move] = 1;
+        sniff winner(b) == 1 { show(b); meow("Ты победил!"); bring; }
+        sniff full(b) { show(b); meow("Ничья."); bring; }
+        b[cat_move(b)] = 2;
+        sniff winner(b) == 2 { show(b); meow("Котик победил! Мяу!"); bring; }
+        sniff full(b) { show(b); meow("Ничья."); bring; }
+    }
+}

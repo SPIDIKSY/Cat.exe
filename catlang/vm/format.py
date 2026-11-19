@@ -182,7 +182,7 @@ def verify(p):
             raise FormatError(f"bad local slot {arg} at 0x{a:04X}")
         if name == "CALL" and arg >= len(p.funcs):
             raise FormatError(f"bad function index {arg} at 0x{a:04X}")
-        if name in ("PRINTS", "WRITES") and arg >= len(p.consts):
+        if name in ("PRINTS", "WRITES", "STR") and arg >= len(p.consts):
             raise FormatError(f"bad constant index {arg} at 0x{a:04X}")
     last = {}
     for a, name, *_ in ins:

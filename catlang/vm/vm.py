@@ -6,7 +6,9 @@ from .opcodes import decode
 
 MAX_FRAMES = 10_000
 MAX_STACK = 1_000_000
-MEM_SIZE = 65536
+USER_MEM = 65536          # peek*/poke* (look*/bat*) работают только здесь
+HEAP_START = USER_MEM     # дальше — куча (массивы и строки)
+MEM_SIZE = 4 * 1024 * 1024
 
 
 def _parse_int(text):
@@ -35,6 +37,8 @@ class VM:
         self.rng = (seed or 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF or 1
         self.in_ok = True
         self.mem = bytearray(MEM_SIZE)
+        self.top = HEAP_START
+        self.const_h = [self.new_str(c.encode("utf-8")) for c in program.consts]
         ins = decode(program.code)
         self.addr2ix = {a: i for i, (a, *_) in enumerate(ins)}
         self.ins = []
@@ -42,6 +46,35 @@ class VM:
             if name in ("JMP", "JZ", "JNZ"):
                 arg = self.addr2ix[arg]
             self.ins.append((name, arg, BY_CODE.get(ty)))
+
+    # --- куча: простой «бампер»-аллокатор без освобождения ---
+    def alloc(self, nbytes):
+        size = (nbytes + 7) & ~7
+        if self.top + size > MEM_SIZE:
+            raise CatTrap("out of memory")
+        h, self.top = self.top, self.top + size
+        return h
+
+    def new_str(self, data):
+        h = self.alloc(4 + len(data))
+        self.mem[h:h + 4 + len(data)] = len(data).to_bytes(4, "little") + data
+        return h
+
+    def length(self, h):
+        """Длина массива/строки; проверяет, что h — настоящий объект кучи."""
+        if h < HEAP_START or h + 4 > self.top:
+            raise CatTrap("invalid reference (null or corrupted)")
+        return int.from_bytes(self.mem[h:h + 4], "little")
+
+    def text(self, h):
+        n = self.length(h)
+        return bytes(self.mem[h + 4:h + 4 + n])
+
+    def elem_addr(self, h, i, es):
+        n = self.length(h)
+        if not 0 <= i < n or h + 4 + n * es > self.top:
+            raise CatTrap(f"index {i} is out of bounds (length {n})")
+        return h + 4 + i * es
 
     # --- место ошибки ---
     def where(self, ip, fn):
@@ -169,16 +202,57 @@ class VM:
                 elif op == "LOADM":
                     a = pop()
                     n = ty.bits // 8
-                    if a + n > MEM_SIZE:
+                    if a + n > USER_MEM:
                         raise CatTrap(f"memory read out of bounds (address {a})")
                     push(wrap(int.from_bytes(mem[a:a + n], "little"), ty))
                 elif op == "STOREM":
                     v = pop()
                     a = pop()
                     n = ty.bits // 8
-                    if a + n > MEM_SIZE:
+                    if a + n > USER_MEM:
                         raise CatTrap(f"memory write out of bounds (address {a})")
                     mem[a:a + n] = (v & ty.mask).to_bytes(n, "little")
+                elif op == "ALOAD":
+                    i = pop()
+                    es = max(1, ty.bits // 8)
+                    a = self.elem_addr(pop(), i, es)
+                    push(wrap(int.from_bytes(mem[a:a + es], "little"), ty))
+                elif op == "ASTORE":
+                    v = pop()
+                    i = pop()
+                    es = max(1, ty.bits // 8)
+                    a = self.elem_addr(pop(), i, es)
+                    mem[a:a + es] = (v & ty.mask).to_bytes(es, "little")
+                elif op == "NEWARR":
+                    n = pop()
+                    v = pop()
+                    es = max(1, ty.bits // 8)
+                    if n * es > MEM_SIZE - self.top:
+                        raise CatTrap("out of memory")
+                    h = self.alloc(4 + n * es)
+                    mem[h:h + 4 + n * es] = n.to_bytes(4, "little") + (v & ty.mask).to_bytes(es, "little") * n
+                    push(h)
+                elif op == "ALEN":
+                    push(self.length(pop()))
+                elif op == "STR":
+                    push(self.const_h[arg])
+                elif op == "SCAT":
+                    b = self.text(pop())
+                    push(self.new_str(self.text(pop()) + b))
+                elif op == "STREQ":
+                    b = self.text(pop())
+                    push(int(self.text(pop()) == b))
+                elif op == "ITOS":
+                    push(self.new_str(str(pop()).encode("ascii")))
+                elif op == "READS":
+                    line = self.inp()
+                    if line is None:
+                        raise CatTrap("end of input")
+                    push(self.new_str(line.encode("utf-8")))
+                elif op == "PRINTV":
+                    out(self.text(pop()).decode("utf-8", "replace") + "\n")
+                elif op == "WRITEV":
+                    out(self.text(pop()).decode("utf-8", "replace"))
                 elif op == "ASSERT":
                     if not pop():
                         raise CatTrap("assertion failed")

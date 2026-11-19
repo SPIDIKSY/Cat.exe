@@ -59,6 +59,11 @@ class Parser:
         return A.Program(uses, funcs)
 
     def type_ref(self):
+        if self.is_("op", "["):
+            b = self.next()
+            inner = self.type_ref()
+            self.expect("op", "]")
+            return A.TypeRef(b.line, b.col, f"[{inner.name}]", inner)
         t = self.expect("id", what="type name")
         return A.TypeRef(t.line, t.col, t.value)
 
@@ -131,6 +136,13 @@ class Parser:
             self.expect("op", ";")
             return A.Assign(t.line, t.col, t.value, val)
         e = self.expr()
+        if self.is_("op", "="):
+            if not isinstance(e, A.Index):
+                self.err("only a variable or an array element can be assigned")
+            self.next()
+            val = self.expr()
+            self.expect("op", ";")
+            return A.IndexAssign(t.line, t.col, e.base, e.index, val)
         self.expect("op", ";")
         return A.ExprStmt(t.line, t.col, e)
 
@@ -174,10 +186,32 @@ class Parser:
             if self.is_("int"):
                 return A.IntLit(t.line, t.col, -self.next().value)
             return A.Unary(t.line, t.col, "-", self.unary())
-        return self.primary()
+        return self.postfix()
+
+    def postfix(self):
+        e = self.primary()
+        while self.is_("op", "["):
+            b = self.next()
+            idx = self.expr()
+            self.expect("op", "]")
+            e = A.Index(b.line, b.col, e, idx)
+        return e
 
     def primary(self):
         t = self.next()
+        if t.kind == "op" and t.value == "[":
+            if self.accept("op", "]"):
+                return A.ArrayLit(t.line, t.col, [])
+            first = self.expr()
+            if self.accept("op", ";"):
+                n = self.expr()
+                self.expect("op", "]")
+                return A.ArrayRepeat(t.line, t.col, first, n)
+            elems = [first]
+            while self.accept("op", ","):
+                elems.append(self.expr())
+            self.expect("op", "]")
+            return A.ArrayLit(t.line, t.col, elems)
         if t.kind == "int":
             return A.IntLit(t.line, t.col, t.value)
         if t.kind == "str":

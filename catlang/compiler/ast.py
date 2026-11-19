@@ -12,6 +12,7 @@ class Node:
 @dataclass(eq=False)
 class TypeRef(Node):
     name: str
+    elem: Optional["TypeRef"] = None  # для массива [T]
 
 
 # --- выражения ---
@@ -61,6 +62,24 @@ class Cast(Expr):
 
 
 @dataclass(eq=False)
+class Index(Expr):
+    base: Expr
+    index: Expr
+
+
+@dataclass(eq=False)
+class ArrayLit(Expr):
+    elems: list
+    tmp: int = field(default=-1, kw_only=True)  # (т) скрытая переменная для сборки
+
+
+@dataclass(eq=False)
+class ArrayRepeat(Expr):
+    value: Expr
+    count: Expr
+
+
+@dataclass(eq=False)
 class Call(Expr):
     name: str
     args: List[Expr]
@@ -87,6 +106,13 @@ class Assign(Node):
     name: str
     value: Expr
     slot: int = field(default=-1, kw_only=True)  # (т)
+
+
+@dataclass(eq=False)
+class IndexAssign(Node):
+    base: Expr
+    index: Expr
+    value: Expr
 
 
 @dataclass(eq=False)

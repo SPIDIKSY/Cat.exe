@@ -3,7 +3,7 @@ from . import ast as A
 from .diagnostics import CatError, CompileError
 from .vocab import shown
 from ..core.cattypes import (BOOL, BY_NAME, ERR, I32, I64, STR, U8, U16, U32, U64,
-                             VOID, max_of, min_of)
+                             VOID, array_of, max_of, min_of)
 
 ARITH = {"+", "-", "*", "/", "%"}
 SHIFT = {"<<", ">>"}
@@ -12,7 +12,7 @@ EQ = {"==", "!="}
 ORD = {"<", "<=", ">", ">="}
 PEEK = {"look8": U8, "look16": U16, "look32": U32, "look64": U64}
 POKE = {"bat8": U8, "bat16": U16, "bat32": U32, "bat64": U64}
-BUILTINS = {"meow", "mew", "claw", "ask", "heard", "roll"} | set(PEEK) | set(POKE)
+BUILTINS = {"meow", "mew", "claw", "ask", "heard", "roll", "stretch", "scribble", "listen"} | set(PEEK) | set(POKE)
 
 
 def is_lit(e):
@@ -43,6 +43,9 @@ class Checker:
 
     # --- типы ---
     def resolve(self, ref):
+        if ref.elem is not None:
+            inner = self.resolve(ref.elem)
+            return ERR if inner is ERR else array_of(inner)
         t = BY_NAME.get(ref.name)
         if t is None:
             self.error(f"unknown type '{ref.name}'", ref)
@@ -115,8 +118,8 @@ class Checker:
                 self.require(s.init, t)
             else:
                 t = self.expr(s.init, None)
-                if t in (VOID, STR):
-                    self.error(f"cannot store a value of type '{t}' in a variable", s.init)
+                if t is VOID:
+                    self.error("cannot store a value of type 'void' in a variable", s.init)
                     t = ERR
             s.slot = self.declare(s.name, t, s)  # объявляем ПОСЛЕ init
         elif isinstance(s, A.Assign):
@@ -127,6 +130,16 @@ class Checker:
             else:
                 s.slot = v[1]
                 self.require(s.value, v[0])
+        elif isinstance(s, A.IndexAssign):
+            tb = self.expr(s.base, None)
+            self.require(s.index, U32)
+            if tb is ERR:
+                self.expr(s.value, None)
+            elif tb.ref == "array":
+                self.require(s.value, tb.elem)
+            else:
+                self.error("strings are immutable" if tb is STR else f"cannot index a value of type '{tb}'", s)
+                self.expr(s.value, None)
         elif isinstance(s, A.If):
             self.require(s.cond, BOOL)
             self.block(s.then)
@@ -235,9 +248,46 @@ class Checker:
             return dst
         if isinstance(e, A.Binary):
             return self.binary(e, hint)
+        if isinstance(e, A.Index):
+            tb = self.expr(e.base, None)
+            self.require(e.index, U32)
+            if tb is ERR:
+                return ERR
+            if tb.ref == "array":
+                return tb.elem
+            if tb is STR:
+                return U8
+            self.error(f"cannot index a value of type '{tb}'", e)
+            return ERR
+        if isinstance(e, (A.ArrayLit, A.ArrayRepeat)):
+            return self.array_expr(e, hint)
         if isinstance(e, A.Call):
             return self.call(e)
         raise AssertionError(e)
+
+    def array_expr(self, e, hint):
+        eh = hint.elem if hint is not None and hint.ref == "array" else None
+        if isinstance(e, A.ArrayRepeat):
+            t = self.expr(e.value, eh)
+            self.require(e.count, U32)
+        elif not e.elems:
+            if eh is None:
+                self.error("cannot infer the element type of an empty array", e)
+                return ERR
+            t = eh
+        else:
+            t = self.expr(e.elems[0], eh)
+            for el in e.elems[1:]:
+                self.require(el, t)
+        if t is VOID:
+            self.error("array elements cannot be 'void'", e)
+            return ERR
+        if t is ERR:
+            return ERR
+        if isinstance(e, A.ArrayLit):
+            e.tmp = self.nslots
+            self.nslots += 1
+        return array_of(t)
 
     def binary(self, e, hint):
         op = e.op
@@ -255,6 +305,10 @@ class Checker:
             self.error(f"type mismatch: '{tl}' {shown(op)} '{tr}' (use '{shown('as')}' to convert)", e)
             return ERR
         if op in ("&&", "||") and tl is BOOL:
+            return BOOL
+        if tl is STR and op == "+":
+            return STR
+        if tl is STR and op in EQ:
             return BOOL
         if op in ARITH | SHIFT and tl.is_int:
             return tl
@@ -323,6 +377,21 @@ class Checker:
             if arity(1):
                 self.require(args[0], BOOL)
             return VOID
+        if n == "stretch":
+            if arity(1):
+                t = self.expr(args[0], None)
+                if t is not STR and t.ref != "array" and t is not ERR:
+                    self.error(f"'stretch' needs an array or a string, found '{t}'", args[0])
+            return U32
+        if n == "scribble":
+            if arity(1):
+                t = self.expr(args[0], None)
+                if not t.is_int and t is not ERR:
+                    self.error(f"'scribble' needs an integer, found '{t}'", args[0])
+            return STR
+        if n == "listen":
+            arity(0)
+            return STR
         if n in PEEK:
             if arity(1):
                 self.require(args[0], U32)

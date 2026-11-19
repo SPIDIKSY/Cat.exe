@@ -7,7 +7,7 @@ from .vocab import SURFACE
 Token = namedtuple("Token", "kind value line col")  # kind: int str id kw op eof
 
 OPS2 = {"==", "!=", "<=", ">=", "<<", ">>", "->", "&&", "||", ".."}
-OPS1 = set("(){},;:=<>+-*/%.")
+OPS1 = set("(){}[],;:=<>+-*/%.")
 ESC = {"n": "\n", "t": "\t", "\\": "\\", '"': '"', "0": "\0"}
 
 

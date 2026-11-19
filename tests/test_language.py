@@ -141,7 +141,7 @@ class Errors(unittest.TestCase):
         self.has(main("let a: u8 = 1; print(-a);"), "cannot be applied")
 
     def test_string_misuse(self):
-        self.has(main('let s = "x";'), "cannot store")
+        self.has(main("let v = print(1);"), "void")
 
     def test_multiple_errors_reported(self):
         self.assertGreaterEqual(len(self.errs(main("print(a); print(b);"))), 2)

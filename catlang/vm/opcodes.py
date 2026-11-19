@@ -30,6 +30,10 @@ OPS = {
     "WRITEI": (0x83, ""), "WRITEB": (0x84, ""), "WRITES": (0x85, "u16"),
     "READI": (0x86, ""), "INOK": (0x87, ""), "RAND": (0x88, ""),
     "ASSERT": (0xA0, ""),
+    # массивы и строки (значение — адрес объекта в куче)
+    "ALOAD": (0xB0, "ty"), "ASTORE": (0xB1, "ty"), "ALEN": (0xB2, ""), "NEWARR": (0xB3, "ty"),
+    "STR": (0xB4, "u16"), "SCAT": (0xB5, ""), "STREQ": (0xB6, ""), "ITOS": (0xB7, ""),
+    "READS": (0xB8, ""), "PRINTV": (0xB9, ""), "WRITEV": (0xBA, ""),
 }
 BY_OPCODE = {code: (name, fmt) for name, (code, fmt) in OPS.items()}
 SIZE = {"": 1, "ty": 2, "tyimm": 10, "u16": 3, "u32": 5}

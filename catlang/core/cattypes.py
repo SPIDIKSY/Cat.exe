@@ -1,5 +1,6 @@
 """Типы CAT. Общие для компилятора и виртуальной машины."""
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -8,6 +9,8 @@ class Type:
     bits: int
     signed: bool
     code: int  # номер типа в байткоде
+    ref: str = ""     # "" | "array" | "str": ссылочные типы живут в куче, значение — 32-битный адрес
+    elem: Any = None  # тип элемента массива
 
     @property
     def mask(self):
@@ -15,7 +18,7 @@ class Type:
 
     @property
     def is_int(self):
-        return self.bits > 1
+        return self.bits > 1 and not self.ref
 
     def __str__(self):
         return self.name
@@ -33,12 +36,28 @@ I64 = Type("i64", 64, True, 8)
 
 # Служебные типы компилятора (в байткоде не встречаются)
 VOID = Type("void", 0, False, 250)
-STR = Type("str", 0, False, 251)
+STR = Type("str", 32, False, 251, ref="str")
 ERR = Type("<error>", 0, False, 252)
 
 TYPES = (BOOL, U8, U16, U32, U64, I8, I16, I32, I64)
 BY_NAME = {t.name: t for t in TYPES}
+BY_NAME["str"] = STR
 BY_CODE = {t.code: t for t in TYPES}
+
+
+_ARR = {}
+
+
+def array_of(t):
+    """Тип массива `[t]` (один объект на тип, можно сравнивать через `is`)."""
+    if t not in _ARR:
+        _ARR[t] = Type(f"[{t.name}]", 32, False, 253, ref="array", elem=t)
+    return _ARR[t]
+
+
+def storage(t):
+    """Тип, которым значение хранится в памяти/байткоде: ссылки — как u32."""
+    return U32 if t.ref else t
 
 
 def wrap(v, t):

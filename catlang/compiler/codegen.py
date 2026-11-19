@@ -3,7 +3,7 @@
 from collections import namedtuple
 
 from . import ast as A
-from ..core.cattypes import BOOL, STR
+from ..core.cattypes import BOOL, STR, U32, storage
 from ..vm.format import Debug, FuncInfo, Program
 from ..vm.opcodes import OPS, SIZE, encode
 
@@ -47,7 +47,7 @@ class Gen:
             if f.ret_type.bits == 0:
                 self.emit("RETV", line=f.line)
             else:
-                self.emit("PUSH", 0, f.ret_type, f.line)
+                self.emit("PUSH", 0, storage(f.ret_type), f.line)
                 self.emit("RET", line=f.line)
             self.irs[f.name] = self.out
             i += 1
@@ -127,9 +127,14 @@ class Gen:
                 self.emit("RETV", line=ln)
         elif isinstance(s, A.Block):
             self.block(s)
+        elif isinstance(s, A.IndexAssign):
+            self.expr(s.base)
+            self.expr(s.index)
+            self.expr(s.value)
+            self.emit("ASTORE", ty=storage(s.value.ty), line=ln)
         elif isinstance(s, A.ExprStmt):
             self.expr(s.expr)
-            if s.expr.ty.bits != 0 and s.expr.ty is not STR:
+            if s.expr.ty.bits != 0:
                 self.emit("POP", line=ln)
 
     # --- выражения ---
@@ -137,8 +142,30 @@ class Gen:
         ln = e.line
         if isinstance(e, (A.IntLit, A.BoolLit)):
             self.emit("PUSH", int(e.value), e.ty, ln)
+        elif isinstance(e, A.StrLit):
+            self.emit("STR", self.const(e.value), line=ln)
         elif isinstance(e, A.Var):
             self.emit("LOAD", e.slot, line=ln)
+        elif isinstance(e, A.Index):
+            self.expr(e.base)
+            self.expr(e.index)
+            self.emit("ALOAD", ty=storage(e.ty), line=ln)
+        elif isinstance(e, A.ArrayRepeat):
+            self.expr(e.value)
+            self.expr(e.count)
+            self.emit("NEWARR", ty=storage(e.value.ty), line=ln)
+        elif isinstance(e, A.ArrayLit):
+            et = storage(e.ty.elem)
+            self.emit("PUSH", 0, et, ln)
+            self.emit("PUSH", len(e.elems), U32, ln)
+            self.emit("NEWARR", ty=et, line=ln)
+            self.emit("STORE", e.tmp, line=ln)
+            for i, el in enumerate(e.elems):
+                self.emit("LOAD", e.tmp, line=ln)
+                self.emit("PUSH", i, U32, ln)
+                self.expr(el)
+                self.emit("ASTORE", ty=et, line=ln)
+            self.emit("LOAD", e.tmp, line=ln)
         elif isinstance(e, A.Unary):
             self.expr(e.operand)
             self.emit("MEOW" if e.op == "meow" else "NEG", ty=e.ty, line=ln)
@@ -154,6 +181,12 @@ class Gen:
             self.emit("LABEL", skip)
             self.emit("PUSH", int(e.op == "||"), BOOL, ln)
             self.emit("LABEL", end)
+        elif isinstance(e, A.Binary) and e.left.ty is STR:  # строки: + и ==, !=
+            self.expr(e.left)
+            self.expr(e.right)
+            self.emit("SCAT" if e.op == "+" else "STREQ", line=ln)
+            if e.op == "!=":
+                self.emit("MEOW", ty=BOOL, line=ln)
         elif isinstance(e, A.Binary):
             self.expr(e.left)
             self.expr(e.right)
@@ -176,7 +209,11 @@ class Gen:
                 self.emit(p + "S", self.const(a.value), line=ln)
             else:
                 self.expr(a)
-                self.emit(p + ("B" if a.ty is BOOL else "I"), line=ln)
+                self.emit(p + ("B" if a.ty is BOOL else "V" if a.ty is STR else "I"), line=ln)
+        elif n in ("stretch", "scribble", "listen"):
+            for a in e.args:
+                self.expr(a)
+            self.emit({"stretch": "ALEN", "scribble": "ITOS", "listen": "READS"}[n], line=ln)
         elif n in ("ask", "heard", "roll"):
             for a in e.args:
                 self.expr(a)

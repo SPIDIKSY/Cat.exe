@@ -19,6 +19,7 @@ python -m catlang build examples/fib.cat --strip  # релиз без отлад
 python -m catlang run examples/fib.catc
 python -m catlang disasm examples/fib.cat         # посмотреть байткод
 python -m catlang run examples/guess.cat           # игра «Угадай число»
+python -m catlang run examples/tictactoe.cat       # крестики-нолики против котика
 python -m catlang logic                           # таблицы истинности + самопроверка
 python -m unittest discover -t . -s tests         # тесты
 ```

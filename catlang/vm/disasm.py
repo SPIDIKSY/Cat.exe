@@ -24,7 +24,7 @@ def disassemble(p):
                 parts.append(names[arg] if arg < len(names) else f"fn#{arg}")
             elif name in ("JMP", "JZ", "JNZ"):
                 parts.append(f"{arg:04X}")
-            elif name in ("PRINTS", "WRITES"):
+            elif name in ("PRINTS", "WRITES", "STR"):
                 parts.append(repr(p.consts[arg]))
             else:
                 parts.append(str(arg))

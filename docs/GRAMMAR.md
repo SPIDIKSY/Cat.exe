@@ -7,11 +7,12 @@ program   = { use | func } ;
 use       = "adopt" ident ";" ;
 func      = "purr" ident "(" [ param { "," param } ] ")" [ "->" type ] block ;
 param     = ident ":" type ;
-type      = "bool" | "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64" ;
+type      = "[" type "]" | "str" | "bool" | "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64" ;
 
 block     = "{" { stmt } "}" ;
 stmt      = "yarn" ident [ ":" type ] "=" expr ";"
           | ident "=" expr ";"
+          | postfix "[" expr "]" "=" expr ";"   (* запись в элемент массива *)
           | "sniff" expr block [ "hiss" ( if_stmt | block ) ]
           | "chase" expr block
           | "prowl" ident "among" expr ".." expr block   (* i = начало .. конец-1 *)
@@ -32,8 +33,11 @@ shift     = sum   { ("<<" | ">>") sum } ;
 sum       = term  { ("+" | "-") term } ;
 term      = cast  { ("*" | "/" | "%") cast } ;
 cast      = unary { "like" type } ;
-unary     = "T" unary | "-" unary | primary ;
-primary   = int | string | "yes" | "no" | "(" expr ")"
+unary     = "T" unary | "-" unary | postfix ;
+postfix   = primary { "[" expr "]" } ;      (* индекс: массив или строка, индекс — u32 *)
+primary   = int | string | "[" expr { "," expr } "]"       (* литерал массива *)
+          | "[" expr ";" expr "]"                       (* [значение; сколько] *)
+          | int | string | "yes" | "no" | "(" expr ")"
           | ident [ "." ident ] "(" [ expr { "," expr } ] ")"   (* вызов *)
           | ident ;
 
@@ -57,7 +61,11 @@ ident     = (letter | "_") { letter | digit | "_" } ;
 Сердце языка — четыре **заглавные** буквы `C A T S` (одна буква — один оператор; поэтому имена `C`, `A`, `T`, `S`
 заняты). Типы: `bool u8 u16 u32 u64 i8 i16 i32 i64`.
 
-Встроенные функции: `meow(x)` печать со строкой · `mew(x)` печать без переноса · `claw(cond)` проверка ·
+Массивы и строки живут в куче: `yarn a: [u8] = [0; 10];`, `a[3] = 7;`, `yarn s = "кот" + "!";`.
+Массив — ссылка (передача в функцию не копирует). Строки неизменяемы, хранятся как UTF-8 байты:
+`stretch(s)` — длина в байтах, `s[i]` — байт. Память пока не освобождается (см. DESIGN).
+
+Встроенные функции: `stretch(x)` длина массива/строки · `scribble(n)` число → строка · `listen()` ввод строки · `meow(x)` печать со строкой · `mew(x)` печать без переноса · `claw(cond)` проверка ·
 `ask()` ввод числа · `heard()` «число введено?» · `roll(n)` случайное 0..n-1 ·
 `look8/16/32/64(addr)` чтение памяти · `bat8/16/32/64(addr, v)` запись в память.
 Прежние английские слова (`fn`, `print`, `cat` …) ничего не значат — это обычные имена.
