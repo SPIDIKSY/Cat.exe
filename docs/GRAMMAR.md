@@ -14,11 +14,15 @@ stmt      = "let" ident [ ":" type ] "=" expr ";"
           | ident "=" expr ";"
           | "if" expr block [ "else" ( if_stmt | block ) ]
           | "while" expr block
+          | "for" ident "in" expr ".." expr block   (* i = начало .. конец-1 *)
+          | "break" ";" | "continue" ";"
           | "return" [ expr ] ";"
           | block
           | expr ";" ;
 
-expr      = or ;                        (* уровни от слабого к сильному *)
+expr      = lor ;                       (* уровни от слабого к сильному *)
+lor       = land  { "||" land } ;       (* только bool, короткое вычисление *)
+land      = or    { "&&" or } ;
 or        = xor   { "cats" xor } ;
 xor       = and   { "paw"  and } ;
 and       = equal { "cat"  equal } ;
@@ -38,8 +42,8 @@ string    = '"' { char | "\n" | "\t" | "\\" | "\"" | "\0" } '"' ;
 ident     = (letter | "_") { letter | digit | "_" } ;
 ```
 
-Ключевые слова: `fn let if else while return as true false use cat cats meow paw`.
-Встроенные функции: `print assert peek8 peek16 peek32 peek64 poke8 poke16 poke32 poke64`.
+Ключевые слова: `fn let if else while for in break continue return as true false use cat cats meow paw`.
+Встроенные функции: `print write assert read_int input_ok rand peek8 peek16 peek32 peek64 poke8 poke16 poke32 poke64`.
 
 Правила типов: оба операнда бинарной операции одного типа; условия — `bool`;
 `<` `<=` `>` `>=` — только для целых; `-` (унарный) — только для знаковых;

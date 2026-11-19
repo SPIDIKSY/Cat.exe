@@ -23,7 +23,9 @@ def load(path, strip=False):
 
 def cmd_run(a):
     prog = load(a.file)
-    vm = VM(prog, alu=GateALU() if a.gates else None, out=host.write_out, max_steps=a.max_steps)
+    seed = a.seed if a.seed is not None else host.random_seed()
+    vm = VM(prog, alu=GateALU() if a.gates else None, out=host.write_out,
+            max_steps=a.max_steps, inp=host.read_line, seed=seed)
     try:
         return vm.run()
     except CatTrap as e:
@@ -80,6 +82,7 @@ def main(argv=None):
     r.add_argument("file")
     r.add_argument("--gates", action="store_true", help="считать через вентили (медленно, для проверки)")
     r.add_argument("--max-steps", type=int, default=None, help="лимит инструкций")
+    r.add_argument("--seed", type=int, default=None, help="начальное число для rand() (для повторяемости)")
     b = sub.add_parser("build", help="скомпилировать .cat в .catc")
     b.add_argument("file")
     b.add_argument("-o", "--output")

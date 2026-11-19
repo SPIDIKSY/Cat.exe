@@ -27,6 +27,8 @@ OPS = {
     # ввод-вывод, память, проверки
     "PRINTI": (0x80, ""), "PRINTB": (0x81, ""), "PRINTS": (0x82, "u16"),
     "LOADM": (0x90, "ty"), "STOREM": (0x91, "ty"),
+    "WRITEI": (0x83, ""), "WRITEB": (0x84, ""), "WRITES": (0x85, "u16"),
+    "READI": (0x86, ""), "INOK": (0x87, ""), "RAND": (0x88, ""),
     "ASSERT": (0xA0, ""),
 }
 BY_OPCODE = {code: (name, fmt) for name, (code, fmt) in OPS.items()}

@@ -4,7 +4,7 @@ from .diagnostics import CatError
 from .lexer import tokenize
 
 # Приоритеты бинарных операций: от низкого к высокому
-LEVELS = [{"cats"}, {"paw"}, {"cat"}, {"==", "!="}, {"<", "<=", ">", ">="},
+LEVELS = [{"||"}, {"&&"}, {"cats"}, {"paw"}, {"cat"}, {"==", "!="}, {"<", "<=", ">", ">="},
           {"<<", ">>"}, {"+", "-"}, {"*", "/", "%"}]
 
 
@@ -103,6 +103,18 @@ class Parser:
             self.next()
             cond = self.expr()
             return A.While(t.line, t.col, cond, self.block())
+        if self.is_("kw", "for"):
+            self.next()
+            name = self.expect("id", what="loop variable").value
+            self.expect("kw", "in")
+            start = self.expr()
+            self.expect("op", "..")
+            end = self.expr()
+            return A.For(t.line, t.col, name, start, end, self.block())
+        if self.is_("kw", "break") or self.is_("kw", "continue"):
+            self.next()
+            self.expect("op", ";")
+            return (A.Break if t.value == "break" else A.Continue)(t.line, t.col)
         if self.is_("kw", "return"):
             self.next()
             val = None if self.is_("op", ";") else self.expr()

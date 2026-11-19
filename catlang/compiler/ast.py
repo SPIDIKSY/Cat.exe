@@ -103,6 +103,27 @@ class While(Node):
 
 
 @dataclass(eq=False)
+class For(Node):
+    var: str
+    start: Expr
+    end: Expr
+    body: Block
+    slot: int = field(default=-1, kw_only=True)     # (т)
+    endslot: int = field(default=-1, kw_only=True)  # (т) скрытая переменная «конец»
+    ty: Any = field(default=None, kw_only=True)     # (т)
+
+
+@dataclass(eq=False)
+class Break(Node):
+    pass
+
+
+@dataclass(eq=False)
+class Continue(Node):
+    pass
+
+
+@dataclass(eq=False)
 class Return(Node):
     value: Optional[Expr]
 

@@ -6,9 +6,9 @@ from .diagnostics import CatError
 Token = namedtuple("Token", "kind value line col")  # kind: int str id kw op eof
 
 KEYWORDS = {"fn", "let", "if", "else", "while", "return", "as", "true", "false",
-            "use", "cat", "cats", "meow", "paw"}
+            "use", "cat", "cats", "meow", "paw", "for", "in", "break", "continue"}
 OPS3 = ()
-OPS2 = {"==", "!=", "<=", ">=", "<<", ">>", "->"}
+OPS2 = {"==", "!=", "<=", ">=", "<<", ">>", "->", "&&", "||", ".."}
 OPS1 = set("(){},;:=<>+-*/%.")
 ESC = {"n": "\n", "t": "\t", "\\": "\\", '"': '"', "0": "\0"}
 

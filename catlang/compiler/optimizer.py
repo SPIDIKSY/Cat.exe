@@ -42,6 +42,10 @@ def fold_expr(e):
             return mk(e, ALU.cast(val(e.operand), e.ty), e.ty)
     elif isinstance(e, A.Binary):
         e.left, e.right = fold_expr(e.left), fold_expr(e.right)
+        if e.op in ("&&", "||"):
+            if isinstance(e.left, A.BoolLit):  # короткое вычисление известно заранее
+                return e.left if e.left.value == (e.op == "||") else e.right
+            return e
         if lit(e.left) and lit(e.right):
             a, b, t = val(e.left), val(e.right), e.left.ty
             if e.op in ("/", "%") and b == 0:
@@ -61,7 +65,7 @@ def fold_block(b):
         if s is None:
             continue
         out.append(s)
-        if isinstance(s, A.Return):
+        if isinstance(s, (A.Return, A.Break, A.Continue)):
             break  # дальше код недостижим
     b.stmts = out
     return b
@@ -86,6 +90,9 @@ def fold_stmt(s):
             s.other = fold_stmt(s.other)
         if isinstance(s.cond, A.BoolLit):
             return s.then if s.cond.value else s.other
+    elif isinstance(s, A.For):
+        s.start, s.end = fold_expr(s.start), fold_expr(s.end)
+        s.body = fold_block(s.body)
     elif isinstance(s, A.While):
         s.cond = fold_expr(s.cond)
         s.body = fold_block(s.body)

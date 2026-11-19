@@ -11,7 +11,7 @@ EQ = {"==", "!="}
 ORD = {"<", "<=", ">", ">="}
 PEEK = {"peek8": U8, "peek16": U16, "peek32": U32, "peek64": U64}
 POKE = {"poke8": U8, "poke16": U16, "poke32": U32, "poke64": U64}
-BUILTINS = {"print", "assert"} | set(PEEK) | set(POKE)
+BUILTINS = {"print", "write", "assert", "read_int", "input_ok", "rand"} | set(PEEK) | set(POKE)
 
 
 def is_lit(e):
@@ -69,7 +69,7 @@ class Checker:
 
     # --- функции ---
     def check_func(self, f):
-        self.file, self.cur, self.scopes, self.nslots = f.file, f, [{}], 0
+        self.file, self.cur, self.scopes, self.nslots, self.loops = f.file, f, [{}], 0, 0
         for p, t in zip(f.params, f.param_types):
             self.declare(p.name, t, p)
         self.block(f.body)
@@ -133,7 +133,14 @@ class Checker:
                 self.stmt(s.other)
         elif isinstance(s, A.While):
             self.require(s.cond, BOOL)
+            self.loops += 1
             self.block(s.body)
+            self.loops -= 1
+        elif isinstance(s, A.For):
+            self.for_stmt(s)
+        elif isinstance(s, (A.Break, A.Continue)):
+            if not self.loops:
+                self.error(f"'{'break' if isinstance(s, A.Break) else 'continue'}' outside of a loop", s)
         elif isinstance(s, A.Return):
             rt = self.cur.ret_type
             if s.value is None:
@@ -147,6 +154,31 @@ class Checker:
             self.block(s)
         elif isinstance(s, A.ExprStmt):
             self.expr(s.expr, None)
+
+    def for_stmt(self, s):
+        if is_lit(s.start) and not is_lit(s.end):
+            te = self.expr(s.end, None)
+            ts = self.expr(s.start, te if te is not ERR else None)
+        else:
+            ts = self.expr(s.start, None)
+            te = self.expr(s.end, ts if ts is not ERR else None)
+        if ERR in (ts, te):
+            ts = ERR
+        elif not ts.is_int:
+            self.error(f"'for' range must be integers, found '{ts}'", s.start)
+            ts = ERR
+        elif ts is not te:
+            self.error(f"type mismatch in range: '{ts}'..'{te}'", s.end)
+            ts = ERR
+        s.ty = ts
+        self.scopes.append({})
+        s.slot = self.declare(s.var, ts, s)
+        s.endslot = self.nslots
+        self.nslots += 1
+        self.loops += 1
+        self.block(s.body)
+        self.loops -= 1
+        self.scopes.pop()
 
     # --- выражения ---
     def require(self, e, want):
@@ -221,6 +253,8 @@ class Checker:
         if tl is not tr:
             self.error(f"type mismatch: '{tl}' {op} '{tr}' (use 'as' to convert)", e)
             return ERR
+        if op in ("&&", "||") and tl is BOOL:
+            return BOOL
         if op in ARITH | SHIFT and tl.is_int:
             return tl
         if op in LOGIC and (tl.is_int or tl is BOOL):
@@ -268,7 +302,17 @@ class Checker:
                 return False
             return True
 
-        if n == "print":
+        if n == "read_int":
+            arity(0)
+            return I64
+        if n == "input_ok":
+            arity(0)
+            return BOOL
+        if n == "rand":
+            if arity(1):
+                self.require(args[0], U32)
+            return U32
+        if n in ("print", "write"):
             if arity(1):
                 t = self.expr(args[0], None)
                 if t not in (STR, BOOL, ERR) and not t.is_int:

@@ -9,6 +9,13 @@ MAX_STACK = 1_000_000
 MEM_SIZE = 65536
 
 
+def _parse_int(text):
+    """'  -42 ' -> -42; всё остальное -> None."""
+    t = text.strip()
+    body = t[1:] if t[:1] in ("+", "-") else t
+    return int(t) if body.isdigit() and body.isascii() else None
+
+
 class CatTrap(Exception):
     """Ошибка времени выполнения (ловушка)."""
 
@@ -18,12 +25,15 @@ class CatTrap(Exception):
 
 
 class VM:
-    def __init__(self, program, alu=None, out=None, max_steps=None):
+    def __init__(self, program, alu=None, out=None, max_steps=None, inp=None, seed=None):
         verify(program)
         self.p = program
         self.alu = alu or FastALU()
         self.out = out or (lambda s: None)
         self.max_steps = max_steps
+        self.inp = inp or (lambda: None)
+        self.rng = (seed or 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF or 1
+        self.in_ok = True
         self.mem = bytearray(MEM_SIZE)
         ins = decode(program.code)
         self.addr2ix = {a: i for i, (a, *_) in enumerate(ins)}
@@ -131,6 +141,31 @@ class VM:
                     out("true\n" if pop() else "false\n")
                 elif op == "PRINTS":
                     out(p.consts[arg] + "\n")
+                elif op == "WRITEI":
+                    out(str(pop()))
+                elif op == "WRITEB":
+                    out("true" if pop() else "false")
+                elif op == "WRITES":
+                    out(p.consts[arg])
+                elif op == "READI":
+                    line = self.inp()
+                    if line is None:
+                        raise CatTrap("end of input")
+                    v = _parse_int(line)
+                    self.in_ok = v is not None and -(1 << 63) <= v < (1 << 63)
+                    push(v if self.in_ok else 0)
+                elif op == "INOK":
+                    push(int(self.in_ok))
+                elif op == "RAND":
+                    n = pop()
+                    if n == 0:
+                        raise CatTrap("rand(0): range is empty")
+                    x = self.rng  # xorshift64: только сдвиги и PAW
+                    x ^= (x << 13) & 0xFFFFFFFFFFFFFFFF
+                    x ^= x >> 7
+                    x ^= (x << 17) & 0xFFFFFFFFFFFFFFFF
+                    self.rng = x
+                    push(x % n)
                 elif op == "LOADM":
                     a = pop()
                     n = ty.bits // 8

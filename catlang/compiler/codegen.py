@@ -23,6 +23,7 @@ class Gen:
         self.consts, self.const_ix = [], {}
         self.labels = 0
         self.irs = {}
+        self.loops = []  # (метка continue, метка break)
 
     def func_index(self, name):
         if name not in self.index:
@@ -88,9 +89,36 @@ class Gen:
             self.emit("LABEL", top)
             self.expr(s.cond)
             self.emit("JZ", end, line=ln)
+            self.loops.append((top, end))
             self.block(s.body)
+            self.loops.pop()
             self.emit("JMP", top, line=ln)
             self.emit("LABEL", end)
+        elif isinstance(s, A.For):
+            top, cont, end = self.label(), self.label(), self.label()
+            self.expr(s.start)
+            self.emit("STORE", s.slot, line=ln)
+            self.expr(s.end)
+            self.emit("STORE", s.endslot, line=ln)
+            self.emit("LABEL", top)
+            self.emit("LOAD", s.slot, line=ln)
+            self.emit("LOAD", s.endslot, line=ln)
+            self.emit("LT", ty=s.ty, line=ln)
+            self.emit("JZ", end, line=ln)
+            self.loops.append((cont, end))
+            self.block(s.body)
+            self.loops.pop()
+            self.emit("LABEL", cont)
+            self.emit("LOAD", s.slot, line=ln)
+            self.emit("PUSH", 1, s.ty, ln)
+            self.emit("ADD", ty=s.ty, line=ln)
+            self.emit("STORE", s.slot, line=ln)
+            self.emit("JMP", top, line=ln)
+            self.emit("LABEL", end)
+        elif isinstance(s, A.Break):
+            self.emit("JMP", self.loops[-1][1], line=ln)
+        elif isinstance(s, A.Continue):
+            self.emit("JMP", self.loops[-1][0], line=ln)
         elif isinstance(s, A.Return):
             if s.value is not None:
                 self.expr(s.value)
@@ -117,6 +145,15 @@ class Gen:
         elif isinstance(e, A.Cast):
             self.expr(e.operand)
             self.emit("CAST", ty=e.ty, line=ln)
+        elif isinstance(e, A.Binary) and e.op in ("&&", "||"):
+            skip, end = self.label(), self.label()
+            self.expr(e.left)
+            self.emit("JZ" if e.op == "&&" else "JNZ", skip, line=ln)
+            self.expr(e.right)
+            self.emit("JMP", end, line=ln)
+            self.emit("LABEL", skip)
+            self.emit("PUSH", int(e.op == "||"), BOOL, ln)
+            self.emit("LABEL", end)
         elif isinstance(e, A.Binary):
             self.expr(e.left)
             self.expr(e.right)
@@ -133,13 +170,17 @@ class Gen:
             for a in e.args:
                 self.expr(a)
             self.emit("CALL", self.func_index(n), line=ln)
-        elif n == "print":
-            a = e.args[0]
+        elif n in ("print", "write"):
+            a, p = e.args[0], ("PRINT" if n == "print" else "WRITE")
             if isinstance(a, A.StrLit):
-                self.emit("PRINTS", self.const(a.value), line=ln)
+                self.emit(p + "S", self.const(a.value), line=ln)
             else:
                 self.expr(a)
-                self.emit("PRINTB" if a.ty is BOOL else "PRINTI", line=ln)
+                self.emit(p + ("B" if a.ty is BOOL else "I"), line=ln)
+        elif n in ("read_int", "input_ok", "rand"):
+            for a in e.args:
+                self.expr(a)
+            self.emit({"read_int": "READI", "input_ok": "INOK", "rand": "RAND"}[n], line=ln)
         elif n == "assert":
             self.expr(e.args[0])
             self.emit("ASSERT", line=ln)

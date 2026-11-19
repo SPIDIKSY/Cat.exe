@@ -19,6 +19,17 @@ def write_out(text):
     sys.stdout.write(text)
 
 
+def read_line():
+    """Строка с клавиатуры без перевода строки; None — ввод закончился."""
+    sys.stdout.flush()
+    line = sys.stdin.readline()
+    return line.rstrip("\r\n") if line else None
+
+
+def random_seed():
+    return int.from_bytes(os.urandom(8), "little") or 1
+
+
 def write_err(text):
     sys.stderr.write(text)
 
