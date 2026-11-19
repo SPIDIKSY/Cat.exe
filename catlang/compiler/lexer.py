@@ -2,6 +2,7 @@
 from collections import namedtuple
 
 from .diagnostics import CatError
+from .dictionaries import DICTS, DIRECTIVES
 
 Token = namedtuple("Token", "kind value line col")  # kind: int str id kw op eof
 
@@ -19,6 +20,15 @@ def tokenize(src, file=None):
     def err(msg, l=None, c=None):
         raise CatError(msg, l or line, c or col, file)
 
+    words = {}  # слова выбранного словаря
+    if src.startswith("#"):  # первая строка: #мова be
+        first = src.split("\n", 1)[0].split()
+        if len(first) != 2 or first[0][1:] not in DIRECTIVES or first[1] not in DICTS:
+            err("bad language directive; expected '#мова be' or '#lang en'", 1, 1)
+        words = DICTS[first[1]]
+        while i < n and src[i] != "\n":
+            i += 1
+
     while i < n:
         ch = src[i]
         if ch == "\n":
@@ -32,7 +42,7 @@ def tokenize(src, file=None):
             j = i
             while j < n and (src[j].isalnum() or src[j] == "_"):
                 j += 1
-            w = src[i:j]
+            w = words.get(src[i:j], src[i:j])
             toks.append(Token("kw" if w in KEYWORDS else "id", w, line, col))
             col += j - i
             i = j
