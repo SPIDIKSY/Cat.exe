@@ -1,0 +1,47 @@
+// Модуль math (написан на самом CAT). Подключение: use math;  Вызов: math.gcd(a, b)
+
+fn abs(x: i64) -> i64 {
+    if x < 0 { return -x; }
+    return x;
+}
+
+fn min(a: i64, b: i64) -> i64 {
+    if a < b { return a; }
+    return b;
+}
+
+fn max(a: i64, b: i64) -> i64 {
+    if a > b { return a; }
+    return b;
+}
+
+fn gcd(a: u64, b: u64) -> u64 {
+    while b != 0 {
+        let t: u64 = a % b;
+        a = b;
+        b = t;
+    }
+    return a;
+}
+
+// base^exp по модулю 2^64 (быстрое возведение в степень)
+fn pow(base: u64, exp: u64) -> u64 {
+    let result: u64 = 1;
+    while exp != 0 {
+        if (exp cat 1) == 1 { result = result * base; }
+        base = base * base;
+        exp = exp >> 1;
+    }
+    return result;
+}
+
+// целая часть квадратного корня
+fn isqrt(n: u64) -> u64 {
+    let lo: u64 = 0;
+    let hi: u64 = 4294967296;
+    while hi - lo > 1 {
+        let mid: u64 = (lo + hi) >> 1;
+        if mid * mid <= n { lo = mid; } else { hi = mid; }
+    }
+    return lo;
+}

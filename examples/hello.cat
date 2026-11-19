@@ -1,0 +1,10 @@
+// Первая программа на CAT
+fn main() {
+    print("Hello, CAT!");
+    let x: u8 = 0b1100;
+    let y: u8 = 0b1010;
+    print(x cat y);   // AND  = 8
+    print(x cats y);  // OR   = 14
+    print(x paw y);   // XOR  = 6
+    print(meow x);    // NOT  = 243
+}

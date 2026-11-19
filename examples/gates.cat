@@ -1,0 +1,42 @@
+// Арифметика, построенная ТОЛЬКО из cat / cats / meow / paw (плюс сдвиги и цикл).
+// Так в CAT устроен сумматор: сумма = a paw b paw перенос.
+
+fn add8(a: u8, b: u8) -> u8 {
+    let carry: u8 = 0;
+    let result: u8 = 0;
+    let i: u8 = 0;
+    while i < 8 {
+        let x: u8 = (a >> i) cat 1;
+        let y: u8 = (b >> i) cat 1;
+        let s: u8 = x paw y paw carry;
+        carry = (x cat y) cats (carry cat (x paw y));
+        result = result cats (s << i);
+        i = i + 1;
+    }
+    return result;
+}
+
+// вычитание: a - b = a + meow(b) + 1
+fn sub8(a: u8, b: u8) -> u8 {
+    return add8(add8(a, meow b), 1);
+}
+
+fn main() {
+    let a: u16 = 0;
+    let bad: u32 = 0;
+    while a < 256 {
+        let b: u16 = 0;
+        while b < 256 {
+            let x: u8 = a as u8;
+            let y: u8 = b as u8;
+            if add8(x, y) != x + y { bad = bad + 1; }
+            if sub8(x, y) != x - y { bad = bad + 1; }
+            b = b + 17;
+        }
+        a = a + 5;
+    }
+    print(add8(200, 100));   // 44, т.к. 300 mod 256
+    print(sub8(5, 10));      // 251
+    print(bad);              // 0 — сумматор из вентилей совпадает с «+» и «-»
+    assert(bad == 0);
+}

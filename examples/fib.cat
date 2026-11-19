@@ -1,0 +1,12 @@
+fn fib(n: u32) -> u32 {
+    if n < 2 { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+
+fn main() {
+    let i: u32 = 0;
+    while i <= 15 {
+        print(fib(i));
+        i = i + 1;
+    }
+}
