@@ -1,21 +1,21 @@
-use math;
+adopt math;
 
 // Решето в линейной памяти VM: peek8/poke8
-fn main() {
-    let n: u32 = 50;
-    let i: u32 = 2;
-    while i <= n {
-        let j: u32 = i * i;
-        if peek8(i) == 0 {
-            while j <= n {
-                poke8(j, 1);
+purr main() {
+    yarn n: u32 = 50;
+    yarn i: u32 = 2;
+    chase i <= n {
+        yarn j: u32 = i * i;
+        sniff look8(i) == 0 {
+            chase j <= n {
+                bat8(j, 1);
                 j = j + i;
             }
-            print(i);
+            meow(i);
         }
         i = i + 1;
     }
-    print(math.gcd(48, 18));
-    print(math.pow(2, 10));
-    print(math.isqrt(1000000));
+    meow(math.gcd(48, 18));
+    meow(math.pow(2, 10));
+    meow(math.isqrt(1000000));
 }

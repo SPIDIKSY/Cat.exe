@@ -2,7 +2,7 @@ import os
 import unittest
 
 from catlang.compiler.diagnostics import CompileError
-from catlang.compiler.driver import compile_source
+from tests.helpers import compile_source
 from catlang.compiler.lexer import tokenize
 from catlang.compiler.diagnostics import CatError
 from catlang.vm.vm import CatTrap
@@ -126,7 +126,7 @@ class Errors(unittest.TestCase):
         self.has("fn f() -> u8 { } fn main() { }", "without returning")
 
     def test_no_main(self):
-        self.has("fn f() { }", "no 'fn main()'")
+        self.has("fn f() { }", "no 'purr main()'")
 
     def test_condition_not_bool(self):
         self.has(main("if 1 { }"), "expected 'bool'")
@@ -161,7 +161,7 @@ class Errors(unittest.TestCase):
         with self.assertRaises(CompileError) as c:
             compile_source("fn main() {\n    let a: u8 = 300;\n}", "t.cat")
         text = c.exception.render()
-        self.assertIn("t.cat:2:17", text)
+        self.assertIn("t.cat:2:18", text)
         self.assertIn("^", text)
 
 
@@ -191,11 +191,11 @@ class Examples(unittest.TestCase):
                 src = src.replace("<= 15", "<= 8")  # в режиме вентилей — покороче
             if name == "gates":
                 continue  # проверен отдельно ниже (долго в режиме вентилей)
-            self.assertEqual(run(src, gates=False), run(src, gates=True), name)
+            self.assertEqual(run(src, native=True), run(src, gates=True, native=True), name)
 
     def test_gates_example(self):
         with open(os.path.join(ROOT, "examples", "gates.cat"), encoding="utf-8") as f:
-            self.assertEqual(run(f.read()), ("44\n251\n0\n", 0))
+            self.assertEqual(run(f.read(), native=True), ("44\n251\n0\n", 0))
 
 
 if __name__ == "__main__":

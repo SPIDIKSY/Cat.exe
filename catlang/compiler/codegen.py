@@ -170,21 +170,21 @@ class Gen:
             for a in e.args:
                 self.expr(a)
             self.emit("CALL", self.func_index(n), line=ln)
-        elif n in ("print", "write"):
-            a, p = e.args[0], ("PRINT" if n == "print" else "WRITE")
+        elif n in ("meow", "mew"):
+            a, p = e.args[0], ("PRINT" if n == "meow" else "WRITE")
             if isinstance(a, A.StrLit):
                 self.emit(p + "S", self.const(a.value), line=ln)
             else:
                 self.expr(a)
                 self.emit(p + ("B" if a.ty is BOOL else "I"), line=ln)
-        elif n in ("read_int", "input_ok", "rand"):
+        elif n in ("ask", "heard", "roll"):
             for a in e.args:
                 self.expr(a)
-            self.emit({"read_int": "READI", "input_ok": "INOK", "rand": "RAND"}[n], line=ln)
-        elif n == "assert":
+            self.emit({"ask": "READI", "heard": "INOK", "roll": "RAND"}[n], line=ln)
+        elif n == "claw":
             self.expr(e.args[0])
             self.emit("ASSERT", line=ln)
-        elif n.startswith("peek"):
+        elif n.startswith("look"):
             self.expr(e.args[0])
             self.emit("LOADM", ty=e.ty, line=ln)
         else:  # poke

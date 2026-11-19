@@ -1,6 +1,6 @@
 import unittest
 
-from catlang.compiler.driver import compile_source
+from tests.helpers import compile_source
 from catlang.vm import format as F
 from catlang.vm.disasm import disassemble
 from catlang.vm.vm import VM

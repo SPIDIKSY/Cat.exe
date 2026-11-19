@@ -27,13 +27,16 @@ python -m unittest discover -t . -s tests         # тесты
 ## Пример
 
 ```
-fn main() {
-    let x: u8 = 0b1100;
-    let y: u8 = 0b1010;
-    print(x cat y);    // 8
-    print(x cats y);   // 14
-    print(x paw y);    // 6
-    print(meow x);     // 243
+purr main() {
+    yarn x: u8 = 0b1100;
+    yarn y: u8 = 0b1010;
+    meow(x C y);    // И          = 8
+    meow(x A y);    // ИЛИ        = 14
+    meow(x S y);    // искл. ИЛИ  = 6
+    meow(T x);      // НЕ         = 243
 }
 ```
+Слова языка — кошачьи (`purr` функция, `yarn` переменная, `sniff` если, `chase` пока, `meow` печать…),
+четыре логические операции — буквы `C A T S`. Полная таблица: [docs/GRAMMAR.md](docs/GRAMMAR.md).
+
 Документы: [DESIGN](docs/DESIGN.md) · [GRAMMAR](docs/GRAMMAR.md) · [BYTECODE](docs/BYTECODE.md).

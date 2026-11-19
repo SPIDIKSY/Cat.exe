@@ -2,7 +2,7 @@ import os
 import unittest
 
 from catlang.compiler.diagnostics import CompileError
-from catlang.compiler.driver import compile_source
+from tests.helpers import compile_source
 from catlang.vm.vm import CatTrap
 from tests.helpers import run
 
@@ -105,7 +105,7 @@ class Random(unittest.TestCase):
 class Game(unittest.TestCase):
     def play(self, inputs, seed=5):
         with open(os.path.join(ROOT, "examples", "guess.cat"), encoding="utf-8") as f:
-            return run(f.read(), inputs=inputs, seed=seed)
+            return run(f.read(), inputs=inputs, seed=seed, native=True)
 
     def secret(self):
         for n in range(1, 101):  # ищем загаданное число перебором

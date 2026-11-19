@@ -1,6 +1,7 @@
 """Проверка типов и семантики. Заполняет типы, слоты переменных, цели вызовов."""
 from . import ast as A
 from .diagnostics import CatError, CompileError
+from .vocab import shown
 from ..core.cattypes import (BOOL, BY_NAME, ERR, I32, I64, STR, U8, U16, U32, U64,
                              VOID, max_of, min_of)
 
@@ -9,9 +10,9 @@ SHIFT = {"<<", ">>"}
 LOGIC = {"cat", "cats", "paw"}
 EQ = {"==", "!="}
 ORD = {"<", "<=", ">", ">="}
-PEEK = {"peek8": U8, "peek16": U16, "peek32": U32, "peek64": U64}
-POKE = {"poke8": U8, "poke16": U16, "poke32": U32, "poke64": U64}
-BUILTINS = {"print", "write", "assert", "read_int", "input_ok", "rand"} | set(PEEK) | set(POKE)
+PEEK = {"look8": U8, "look16": U16, "look32": U32, "look64": U64}
+POKE = {"bat8": U8, "bat16": U16, "bat32": U32, "bat64": U64}
+BUILTINS = {"meow", "mew", "claw", "ask", "heard", "roll"} | set(PEEK) | set(POKE)
 
 
 def is_lit(e):
@@ -55,7 +56,7 @@ class Checker:
             f.ret_type = self.resolve(f.ret) if f.ret else VOID
         main = self.funcs.get("main")
         if main is None:
-            self.errors.append(CatError("program has no 'fn main()'", 1, 1, self.list[0].file if self.list else None))
+            self.errors.append(CatError(f"program has no '{shown('fn')} main()'", 1, 1, self.list[0].file if self.list else None))
         else:
             self.file = main.file
             if main.params:
@@ -140,14 +141,14 @@ class Checker:
             self.for_stmt(s)
         elif isinstance(s, (A.Break, A.Continue)):
             if not self.loops:
-                self.error(f"'{'break' if isinstance(s, A.Break) else 'continue'}' outside of a loop", s)
+                self.error(f"'{shown('break') if isinstance(s, A.Break) else shown('continue')}' outside of a loop", s)
         elif isinstance(s, A.Return):
             rt = self.cur.ret_type
             if s.value is None:
                 if rt not in (VOID, ERR):
-                    self.error(f"'return' needs a value of type '{rt}'", s)
+                    self.error(f"'{shown('return')}' needs a value of type '{rt}'", s)
             elif rt is VOID:
-                self.error("this function returns nothing, but 'return' has a value", s.value)
+                self.error(f"this function returns nothing, but '{shown('return')}' has a value", s.value)
             else:
                 self.require(s.value, rt)
         elif isinstance(s, A.Block):
@@ -165,7 +166,7 @@ class Checker:
         if ERR in (ts, te):
             ts = ERR
         elif not ts.is_int:
-            self.error(f"'for' range must be integers, found '{ts}'", s.start)
+            self.error(f"'{shown('for')}' range must be integers, found '{ts}'", s.start)
             ts = ERR
         elif ts is not te:
             self.error(f"type mismatch in range: '{ts}'..'{te}'", s.end)
@@ -218,7 +219,7 @@ class Checker:
                 return t
             if e.op == "-" and t.is_int and t.signed:
                 return t
-            self.error(f"operator '{e.op}' cannot be applied to '{t}'", e)
+            self.error(f"operator '{shown(e.op)}' cannot be applied to '{t}'", e)
             return ERR
         if isinstance(e, A.Cast):
             src = self.expr(e.operand, None)
@@ -251,7 +252,7 @@ class Checker:
         if ERR in (tl, tr):
             return ERR
         if tl is not tr:
-            self.error(f"type mismatch: '{tl}' {op} '{tr}' (use 'as' to convert)", e)
+            self.error(f"type mismatch: '{tl}' {shown(op)} '{tr}' (use '{shown('as')}' to convert)", e)
             return ERR
         if op in ("&&", "||") and tl is BOOL:
             return BOOL
@@ -263,7 +264,7 @@ class Checker:
             return BOOL
         if op in ORD and tl.is_int:
             return BOOL
-        self.error(f"operator '{op}' cannot be applied to '{tl}'", e)
+        self.error(f"operator '{shown(op)}' cannot be applied to '{tl}'", e)
         return ERR
 
     def call(self, e):
@@ -302,23 +303,23 @@ class Checker:
                 return False
             return True
 
-        if n == "read_int":
+        if n == "ask":
             arity(0)
             return I64
-        if n == "input_ok":
+        if n == "heard":
             arity(0)
             return BOOL
-        if n == "rand":
+        if n == "roll":
             if arity(1):
                 self.require(args[0], U32)
             return U32
-        if n in ("print", "write"):
+        if n in ("meow", "mew"):
             if arity(1):
                 t = self.expr(args[0], None)
                 if t not in (STR, BOOL, ERR) and not t.is_int:
                     self.error(f"cannot print a value of type '{t}'", args[0])
             return VOID
-        if n == "assert":
+        if n == "claw":
             if arity(1):
                 self.require(args[0], BOOL)
             return VOID

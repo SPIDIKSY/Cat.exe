@@ -1,47 +1,47 @@
-// Модуль math (написан на самом CAT). Подключение: use math;  Вызов: math.gcd(a, b)
+// Модуль math (написан на самом CAT). Подключение: adopt math;  Вызов: math.gcd(a, b)
 
-fn abs(x: i64) -> i64 {
-    if x < 0 { return -x; }
-    return x;
+purr abs(x: i64) -> i64 {
+    sniff x < 0 { bring -x; }
+    bring x;
 }
 
-fn min(a: i64, b: i64) -> i64 {
-    if a < b { return a; }
-    return b;
+purr min(a: i64, b: i64) -> i64 {
+    sniff a < b { bring a; }
+    bring b;
 }
 
-fn max(a: i64, b: i64) -> i64 {
-    if a > b { return a; }
-    return b;
+purr max(a: i64, b: i64) -> i64 {
+    sniff a > b { bring a; }
+    bring b;
 }
 
-fn gcd(a: u64, b: u64) -> u64 {
-    while b != 0 {
-        let t: u64 = a % b;
+purr gcd(a: u64, b: u64) -> u64 {
+    chase b != 0 {
+        yarn t: u64 = a % b;
         a = b;
         b = t;
     }
-    return a;
+    bring a;
 }
 
 // base^exp по модулю 2^64 (быстрое возведение в степень)
-fn pow(base: u64, exp: u64) -> u64 {
-    let result: u64 = 1;
-    while exp != 0 {
-        if (exp cat 1) == 1 { result = result * base; }
+purr pow(base: u64, exp: u64) -> u64 {
+    yarn result: u64 = 1;
+    chase exp != 0 {
+        sniff (exp C 1) == 1 { result = result * base; }
         base = base * base;
         exp = exp >> 1;
     }
-    return result;
+    bring result;
 }
 
 // целая часть квадратного корня
-fn isqrt(n: u64) -> u64 {
-    let lo: u64 = 0;
-    let hi: u64 = 4294967296;
-    while hi - lo > 1 {
-        let mid: u64 = (lo + hi) >> 1;
-        if mid * mid <= n { lo = mid; } else { hi = mid; }
+purr isqrt(n: u64) -> u64 {
+    yarn lo: u64 = 0;
+    yarn hi: u64 = 4294967296;
+    chase hi - lo > 1 {
+        yarn mid: u64 = (lo + hi) >> 1;
+        sniff mid * mid <= n { lo = mid; } hiss { hi = mid; }
     }
-    return lo;
+    bring lo;
 }

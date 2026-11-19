@@ -2,6 +2,7 @@
 from . import ast as A
 from .diagnostics import CatError
 from .lexer import tokenize
+from .vocab import shown
 
 # Приоритеты бинарных операций: от низкого к высокому
 LEVELS = [{"||"}, {"&&"}, {"cats"}, {"paw"}, {"cat"}, {"==", "!="}, {"<", "<=", ">", ">="},
@@ -32,8 +33,9 @@ class Parser:
     def expect(self, kind, value=None, what=None):
         if not self.is_(kind, value):
             tok = self.peek()
-            found = "end of file" if tok.kind == "eof" else f"'{tok.value}'"
-            self.err(f"expected {what or repr(value) or kind}, found {found}")
+            found = "end of file" if tok.kind == "eof" else f"'{shown(tok.value)}'"
+            want = what or f"'{shown(value)}'" if value else what or kind
+            self.err(f"expected {want}, found {found}")
         return self.next()
 
     def accept(self, kind, value):
@@ -53,7 +55,7 @@ class Parser:
             elif self.is_("kw", "fn"):
                 funcs.append(self.func())
             else:
-                self.err("expected 'fn' or 'use' at top level")
+                self.err(f"expected '{shown('fn')}' or '{shown('use')}' at top level")
         return A.Program(uses, funcs)
 
     def type_ref(self):
@@ -202,7 +204,7 @@ class Parser:
                 return A.Call(t.line, t.col, name, args)
             return A.Var(t.line, t.col, name)
         self.i -= 1
-        found = "end of file" if t.kind == "eof" else f"'{t.value}'"
+        found = "end of file" if t.kind == "eof" else f"'{shown(t.value)}'"
         self.err(f"expected expression, found {found}", t)
 
 

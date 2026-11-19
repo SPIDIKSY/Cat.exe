@@ -2,12 +2,10 @@
 from collections import namedtuple
 
 from .diagnostics import CatError
+from .vocab import SURFACE
 
 Token = namedtuple("Token", "kind value line col")  # kind: int str id kw op eof
 
-KEYWORDS = {"fn", "let", "if", "else", "while", "return", "as", "true", "false",
-            "use", "cat", "cats", "meow", "paw", "for", "in", "break", "continue"}
-OPS3 = ()
 OPS2 = {"==", "!=", "<=", ">=", "<<", ">>", "->", "&&", "||", ".."}
 OPS1 = set("(){},;:=<>+-*/%.")
 ESC = {"n": "\n", "t": "\t", "\\": "\\", '"': '"', "0": "\0"}
@@ -33,7 +31,8 @@ def tokenize(src, file=None):
             while j < n and (src[j].isalnum() or src[j] == "_"):
                 j += 1
             w = src[i:j]
-            toks.append(Token("kw" if w in KEYWORDS else "id", w, line, col))
+            kw = SURFACE.get(w)
+            toks.append(Token("kw", kw, line, col) if kw else Token("id", w, line, col))
             col += j - i
             i = j
         elif ch.isdigit():

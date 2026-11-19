@@ -1,25 +1,25 @@
 // Игра «Угадай число»: котик загадал число от 1 до 100, у тебя 7 попыток.
-fn main() {
-    let secret: i64 = rand(100) as i64 + 1;
-    let tries: i64 = 7;
-    print("Мяу! Я загадал число от 1 до 100. Угадай!");
-    for attempt in 1..tries + 1 {
-        write("Попытка ");
-        write(attempt);
-        write(" из ");
-        write(tries);
-        write(": ");
-        let guess: i64 = read_int();
-        if meow input_ok() {
-            print("Это не число, мяу. Попытка потеряна.");
-            continue;
+purr main() {
+    yarn secret: i64 = roll(100) like i64 + 1;
+    yarn tries: i64 = 7;
+    meow("Мяу! Я загадал число от 1 до 100. Угадай!");
+    prowl attempt among 1..tries + 1 {
+        mew("Попытка ");
+        mew(attempt);
+        mew(" из ");
+        mew(tries);
+        mew(": ");
+        yarn guess: i64 = ask();
+        sniff T heard() {
+            meow("Это не число, мяу. Попытка потеряна.");
+            hop;
         }
-        if guess == secret {
-            print("Угадал! Ты настоящий кот!");
-            return;
+        sniff guess == secret {
+            meow("Угадал! Ты настоящий кот!");
+            bring;
         }
-        if guess < secret { print("Больше."); } else { print("Меньше."); }
+        sniff guess < secret { meow("Больше."); } hiss { meow("Меньше."); }
     }
-    write("Не угадал. Я загадал: ");
-    print(secret);
+    mew("Не угадал. Я загадал: ");
+    meow(secret);
 }

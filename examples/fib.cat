@@ -1,12 +1,12 @@
-fn fib(n: u32) -> u32 {
-    if n < 2 { return n; }
-    return fib(n - 1) + fib(n - 2);
+purr fib(n: u32) -> u32 {
+    sniff n < 2 { bring n; }
+    bring fib(n - 1) + fib(n - 2);
 }
 
-fn main() {
-    let i: u32 = 0;
-    while i <= 15 {
-        print(fib(i));
+purr main() {
+    yarn i: u32 = 0;
+    chase i <= 15 {
+        meow(fib(i));
         i = i + 1;
     }
 }

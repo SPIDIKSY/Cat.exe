@@ -1,10 +1,10 @@
 // Первая программа на CAT
-fn main() {
-    print("Hello, CAT!");
-    let x: u8 = 0b1100;
-    let y: u8 = 0b1010;
-    print(x cat y);   // AND  = 8
-    print(x cats y);  // OR   = 14
-    print(x paw y);   // XOR  = 6
-    print(meow x);    // NOT  = 243
+purr main() {
+    meow("Hello, CAT!");
+    yarn x: u8 = 0b1100;
+    yarn y: u8 = 0b1010;
+    meow(x C y);   // AND  = 8
+    meow(x A y);  // OR   = 14
+    meow(x S y);   // XOR  = 6
+    meow(T x);    // NOT  = 243
 }
