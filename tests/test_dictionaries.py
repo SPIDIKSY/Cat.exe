@@ -36,8 +36,13 @@ class Dictionaries(unittest.TestCase):
         src = "#мова be\nfn main() { print(1); друкуй(2); }"
         self.assertEqual(run(src)[0], "1\n2\n")
 
-    def test_core_ops_same(self):
-        self.assertEqual(run("#lang be\nфункцыя main() { друкуй(12 as u8 cat 10); друкуй(meow 0 as u8); }")[0], "8\n255\n")
+    def test_core_ops_in_belarusian(self):
+        src = ("#мова be\nфункцыя main() { няхай a: u8 = 12; няхай b: u8 = 10;"
+               " друкуй(a кот b); друкуй(a каты b); друкуй(a лапа b); друкуй(мяў a); }")
+        self.assertEqual(run(src)[0], "8\n14\n6\n243\n")
+        en = "fn main() { let a: u8 = 12; let b: u8 = 10; print(a cat b); print(a cats b); print(a paw b); print(meow a); }"
+        self.assertEqual(to_bytes(compile_source(src, "t.cat", strip=True)),
+                         to_bytes(compile_source(en, "t.cat", strip=True)))
 
     def test_lang_directive_english_and_errors(self):
         self.assertEqual(run("#lang en\nfn main() { print(1); }")[0], "1\n")
