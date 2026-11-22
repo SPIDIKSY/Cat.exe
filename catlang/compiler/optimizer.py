@@ -55,6 +55,8 @@ def fold_expr(e):
             return mk(e, getattr(ALU, BIN[e.op])(a, b, t), e.ty)
     elif isinstance(e, A.Call):
         e.args = [fold_expr(a) for a in e.args]
+    elif isinstance(e, A.Field):
+        e.base = fold_expr(e.base)
     elif isinstance(e, A.Index):
         e.base, e.index = fold_expr(e.base), fold_expr(e.index)
     elif isinstance(e, A.ArrayLit):
@@ -83,6 +85,8 @@ def fold_stmt(s):
             s.init = fold_expr(s.init)
         else:
             s.value = fold_expr(s.value)
+    elif isinstance(s, A.FieldAssign):
+        s.base, s.value = fold_expr(s.base), fold_expr(s.value)
     elif isinstance(s, A.IndexAssign):
         s.base, s.index, s.value = fold_expr(s.base), fold_expr(s.index), fold_expr(s.value)
     elif isinstance(s, A.ExprStmt):

@@ -10,7 +10,7 @@ from .parser import parse
 
 def load_modules(prog, sources, file):
     """Подключает `use name;` из stdlib/. Функции модуля получают имя `module.func`."""
-    funcs = list(prog.funcs)
+    funcs, structs = list(prog.funcs), list(prog.structs)
     loaded = set()
 
     def load(uses, in_file):
@@ -27,13 +27,14 @@ def load_modules(prog, sources, file):
                 mod = parse(text, path)
             except CatError as e:
                 raise CompileError([e], sources)
+            structs.extend(mod.structs)
             for f in mod.funcs:
                 f.module, f.name = u.name, f"{u.name}.{f.name}"
                 funcs.append(f)
             load(mod.uses, path)
 
     load(prog.uses, file)
-    return funcs
+    return funcs, structs
 
 
 def compile_source(text, filename="<input>", strip=False, optimize_code=True):
@@ -43,8 +44,8 @@ def compile_source(text, filename="<input>", strip=False, optimize_code=True):
         prog = parse(text, filename)
     except CatError as e:
         raise CompileError([e], sources)
-    funcs = load_modules(prog, sources, filename)
-    Checker(funcs, sources).run()
+    funcs, structs = load_modules(prog, sources, filename)
+    Checker(funcs, sources, structs).run()
     if optimize_code:
         optimize(funcs)
     return generate(funcs, strip=strip, file=filename)

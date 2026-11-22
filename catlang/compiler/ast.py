@@ -62,6 +62,18 @@ class Cast(Expr):
 
 
 @dataclass(eq=False)
+class Nil(Expr):
+    pass
+
+
+@dataclass(eq=False)
+class Field(Expr):
+    base: Expr
+    name: str
+    off: int = field(default=0, kw_only=True)  # (т) смещение поля
+
+
+@dataclass(eq=False)
 class Index(Expr):
     base: Expr
     index: Expr
@@ -85,6 +97,8 @@ class Call(Expr):
     args: List[Expr]
     target: str = field(default="", kw_only=True)  # (т) полное имя функции или встроенной
     builtin: bool = field(default=False, kw_only=True)  # (т)
+    struct: Any = field(default=None, kw_only=True)  # (т) если это конструктор структуры
+    tmp: int = field(default=-1, kw_only=True)  # (т)
 
 
 # --- операторы ---
@@ -113,6 +127,15 @@ class IndexAssign(Node):
     base: Expr
     index: Expr
     value: Expr
+
+
+@dataclass(eq=False)
+class FieldAssign(Node):
+    base: Expr
+    name: str
+    value: Expr
+    off: int = field(default=0, kw_only=True)  # (т)
+    fty: Any = field(default=None, kw_only=True)  # (т)
 
 
 @dataclass(eq=False)
@@ -183,6 +206,14 @@ class Use(Node):
 
 
 @dataclass(eq=False)
+class StructDecl(Node):
+    name: str
+    fields: List[Param]
+    file: Optional[str] = None
+
+
+@dataclass(eq=False)
 class Program:
     uses: List[Use]
     funcs: List[Func]
+    structs: List[StructDecl] = field(default_factory=list)

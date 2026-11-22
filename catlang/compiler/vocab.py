@@ -15,6 +15,8 @@ SURFACE = {
     "bring": "return", "like": "as",
     "yes": "true", "no": "false",
     "adopt": "use",
+    "kit": "struct",     # объявить структуру
+    "ghost": "nil",      # пустая ссылка
     # сердце языка: четыре логические операции (одна заглавная буква)
     "C": "cat",    # И
     "A": "cats",   # ИЛИ
@@ -25,7 +27,7 @@ SURFACE = {
 # встроенные функции (имена в программе; справочная таблица для документации и тестов)
 BUILTINS = {
     "meow": "print (печать со строкой)", "mew": "write (печать без перевода строки)",
-    "claw": "assert", "ask": "read_int", "heard": "input_ok", "roll": "rand",
+    "claw": "assert", "bury": "free (освободить память)", "ask": "read_int", "heard": "input_ok", "roll": "rand",
     "look8/16/32/64": "peek (чтение памяти)", "bat8/16/32/64": "poke (запись в память)",
 }
 

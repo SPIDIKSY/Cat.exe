@@ -112,7 +112,7 @@ class Errors(unittest.TestCase):
         self.has(main('yarn s = "x"; s[0] = 1 like u8;'), "immutable")
         self.has(main('meow("a" + 1);'), "type mismatch")
         self.has(main('meow("a" - "b");'), "cannot be applied")
-        self.has(main("yarn a = [1, 2]; meow(a == a);"), "cannot be applied")
+        self.has(main("yarn a = [1, 2]; meow(a < a);"), "cannot be applied")
         self.has(main("yarn a: [u8] = [1, 2, 3, 300];"), "does not fit")
         self.has(main("yarn e = [];"), "cannot infer")
         self.has(main("yarn a = [1, no];"), "type mismatch")

@@ -45,7 +45,7 @@ class Parser:
 
     # --- верхний уровень ---
     def program(self):
-        uses, funcs = [], []
+        uses, funcs, structs = [], [], []
         while not self.is_("eof"):
             if self.is_("kw", "use"):
                 t = self.next()
@@ -54,9 +54,25 @@ class Parser:
                 uses.append(A.Use(t.line, t.col, name))
             elif self.is_("kw", "fn"):
                 funcs.append(self.func())
+            elif self.is_("kw", "struct"):
+                structs.append(self.struct())
             else:
-                self.err(f"expected '{shown('fn')}' or '{shown('use')}' at top level")
-        return A.Program(uses, funcs)
+                self.err(f"expected '{shown('fn')}', '{shown('struct')}' or '{shown('use')}' at top level")
+        return A.Program(uses, funcs, structs)
+
+    def struct(self):
+        kw = self.next()
+        name = self.expect("id", what="structure name")
+        self.expect("op", "{")
+        fields = []
+        while not self.is_("op", "}"):
+            p = self.expect("id", what="field name")
+            self.expect("op", ":")
+            fields.append(A.Param(p.line, p.col, p.value, self.type_ref()))
+            if not self.accept("op", ","):
+                break
+        self.expect("op", "}")
+        return A.StructDecl(kw.line, kw.col, name.value, fields, self.file)
 
     def type_ref(self):
         if self.is_("op", "["):
@@ -137,11 +153,13 @@ class Parser:
             return A.Assign(t.line, t.col, t.value, val)
         e = self.expr()
         if self.is_("op", "="):
-            if not isinstance(e, A.Index):
-                self.err("only a variable or an array element can be assigned")
+            if not isinstance(e, (A.Index, A.Field)):
+                self.err("only a variable, an array element or a field can be assigned")
             self.next()
             val = self.expr()
             self.expect("op", ";")
+            if isinstance(e, A.Field):
+                return A.FieldAssign(t.line, t.col, e.base, e.name, val)
             return A.IndexAssign(t.line, t.col, e.base, e.index, val)
         self.expect("op", ";")
         return A.ExprStmt(t.line, t.col, e)
@@ -190,12 +208,17 @@ class Parser:
 
     def postfix(self):
         e = self.primary()
-        while self.is_("op", "["):
-            b = self.next()
-            idx = self.expr()
-            self.expect("op", "]")
-            e = A.Index(b.line, b.col, e, idx)
-        return e
+        while True:
+            if self.is_("op", "["):
+                b = self.next()
+                idx = self.expr()
+                self.expect("op", "]")
+                e = A.Index(b.line, b.col, e, idx)
+            elif self.is_("op", ".") and self.is_("id", k=1):
+                b = self.next()
+                e = A.Field(b.line, b.col, e, self.next().value)
+            else:
+                return e
 
     def primary(self):
         t = self.next()
@@ -216,6 +239,8 @@ class Parser:
             return A.IntLit(t.line, t.col, t.value)
         if t.kind == "str":
             return A.StrLit(t.line, t.col, t.value)
+        if t.kind == "kw" and t.value == "nil":
+            return A.Nil(t.line, t.col)
         if t.kind == "kw" and t.value in ("true", "false"):
             return A.BoolLit(t.line, t.col, t.value == "true")
         if t.kind == "op" and t.value == "(":
@@ -224,7 +249,7 @@ class Parser:
             return e
         if t.kind == "id":
             name = t.value
-            if self.is_("op", ".") and self.is_("id", k=1):
+            if self.is_("op", ".") and self.is_("id", k=1) and self.is_("op", "(", k=2):  # модуль.функция(...)
                 self.next()
                 name += "." + self.next().value
             if self.accept("op", "("):

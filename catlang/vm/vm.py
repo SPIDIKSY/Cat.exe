@@ -9,6 +9,9 @@ MAX_STACK = 1_000_000
 USER_MEM = 65536          # peek*/poke* (look*/bat*) работают только здесь
 HEAP_START = USER_MEM     # дальше — куча (массивы и строки)
 MEM_SIZE = 4 * 1024 * 1024
+GEN_SHIFT, ADDR_MASK = 19, (1 << 19) - 1
+K_ARRAY, K_STR, K_STRUCT = 1, 2, 3
+_ARR, _STR, _STRUCT, _ARR_STR = {K_ARRAY}, {K_STR}, {K_STRUCT}, {K_ARRAY, K_STR}
 
 
 def _parse_int(text):
@@ -38,7 +41,9 @@ class VM:
         self.in_ok = True
         self.mem = bytearray(MEM_SIZE)
         self.top = HEAP_START
+        self.live, self.gen, self.free_lists, self.pinned = {}, {}, {}, set()
         self.const_h = [self.new_str(c.encode("utf-8")) for c in program.consts]
+        self.pinned = {(h & ADDR_MASK) << 3 for h in self.const_h}
         ins = decode(program.code)
         self.addr2ix = {a: i for i, (a, *_) in enumerate(ins)}
         self.ins = []
@@ -47,34 +52,66 @@ class VM:
                 arg = self.addr2ix[arg]
             self.ins.append((name, arg, BY_CODE.get(ty)))
 
-    # --- куча: простой «бампер»-аллокатор без освобождения ---
-    def alloc(self, nbytes):
-        size = (nbytes + 7) & ~7
-        if self.top + size > MEM_SIZE:
-            raise CatTrap("out of memory")
-        h, self.top = self.top, self.top + size
-        return h
+    # --- куча ---
+    # Объект = заголовок 8 байт [u32 длина/размер][u32 вид] + данные, выровнен по 8.
+    # Ссылка (u32) = (поколение << 19) | (адрес >> 3). Освобождённый блок получает новое поколение при
+    # повторном использовании, поэтому старые ссылки на него (use-after-free) ловятся.
+    def alloc(self, payload, kind, n, fill=b""):
+        size = (8 + payload + 7) & ~7
+        lst = self.free_lists.get(size)
+        if lst:
+            addr = lst.pop()
+        else:
+            if self.top + size > MEM_SIZE:
+                raise CatTrap("out of memory")
+            addr, self.top = self.top, self.top + size
+        gen = self.gen.get(addr, 0) % 8191 + 1
+        self.gen[addr] = gen
+        self.live[addr] = size
+        self.mem[addr:addr + 8 + payload] = n.to_bytes(4, "little") + kind.to_bytes(4, "little") + fill
+        return (gen << GEN_SHIFT) | (addr >> 3)
 
     def new_str(self, data):
-        h = self.alloc(4 + len(data))
-        self.mem[h:h + 4 + len(data)] = len(data).to_bytes(4, "little") + data
-        return h
+        return self.alloc(len(data), K_STR, len(data), data)
 
-    def length(self, h):
-        """Длина массива/строки; проверяет, что h — настоящий объект кучи."""
-        if h < HEAP_START or h + 4 > self.top:
-            raise CatTrap("invalid reference (null or corrupted)")
-        return int.from_bytes(self.mem[h:h + 4], "little")
+    def obj(self, h, kinds):
+        """Адрес объекта по ссылке; проверяет, что он жив и нужного вида."""
+        addr = (h & ADDR_MASK) << 3
+        if addr not in self.live or self.gen[addr] != h >> GEN_SHIFT:
+            raise CatTrap("invalid reference (null, freed or forged)")
+        if kinds is not None and self.mem[addr + 4] not in kinds:
+            raise CatTrap("reference points to an object of a different kind")
+        return addr
+
+    def length(self, addr):
+        return int.from_bytes(self.mem[addr:addr + 4], "little")
 
     def text(self, h):
-        n = self.length(h)
-        return bytes(self.mem[h + 4:h + 4 + n])
+        addr = self.obj(h, _STR)
+        return bytes(self.mem[addr + 8:addr + 8 + self.length(addr)])
 
-    def elem_addr(self, h, i, es):
-        n = self.length(h)
-        if not 0 <= i < n or h + 4 + n * es > self.top:
+    def elem_addr(self, h, i, es, write=False):
+        addr = self.obj(h, _ARR if write else _ARR_STR)
+        n = self.length(addr)
+        if not 0 <= i < n:
             raise CatTrap(f"index {i} is out of bounds (length {n})")
-        return h + 4 + i * es
+        return addr + 8 + i * es
+
+    def field_addr(self, h, off, es):
+        addr = self.obj(h, _STRUCT)
+        if off + es > self.length(addr):
+            raise CatTrap("field is outside of the structure")
+        return addr + 8 + off
+
+    def free(self, h):
+        addr = self.obj(h, None)
+        if addr in self.pinned:
+            raise CatTrap("cannot free a constant")
+        size = self.live.pop(addr)
+        self.free_lists.setdefault(size, []).append(addr)
+
+    def live_bytes(self):
+        return sum(self.live.values())
 
     # --- место ошибки ---
     def where(self, ip, fn):
@@ -221,19 +258,30 @@ class VM:
                     v = pop()
                     i = pop()
                     es = max(1, ty.bits // 8)
-                    a = self.elem_addr(pop(), i, es)
+                    a = self.elem_addr(pop(), i, es, True)
                     mem[a:a + es] = (v & ty.mask).to_bytes(es, "little")
                 elif op == "NEWARR":
                     n = pop()
                     v = pop()
                     es = max(1, ty.bits // 8)
-                    if n * es > MEM_SIZE - self.top:
+                    if n * es + 8 > MEM_SIZE:
                         raise CatTrap("out of memory")
-                    h = self.alloc(4 + n * es)
-                    mem[h:h + 4 + n * es] = n.to_bytes(4, "little") + (v & ty.mask).to_bytes(es, "little") * n
-                    push(h)
+                    push(self.alloc(n * es, K_ARRAY, n, (v & ty.mask).to_bytes(es, "little") * n))
                 elif op == "ALEN":
-                    push(self.length(pop()))
+                    push(self.length(self.obj(pop(), _ARR_STR)))
+                elif op == "NEWS":
+                    push(self.alloc(arg, K_STRUCT, arg, bytes(arg)))
+                elif op == "FLOAD":
+                    es = max(1, ty.bits // 8)
+                    a = self.field_addr(pop(), arg, es)
+                    push(wrap(int.from_bytes(mem[a:a + es], "little"), ty))
+                elif op == "FSTORE":
+                    v = pop()
+                    es = max(1, ty.bits // 8)
+                    a = self.field_addr(pop(), arg, es)
+                    mem[a:a + es] = (v & ty.mask).to_bytes(es, "little")
+                elif op == "FREE":
+                    self.free(pop())
                 elif op == "STR":
                     push(self.const_h[arg])
                 elif op == "SCAT":

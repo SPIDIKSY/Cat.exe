@@ -1,9 +1,11 @@
 """Проверка типов и семантики. Заполняет типы, слоты переменных, цели вызовов."""
+from dataclasses import dataclass
+
 from . import ast as A
 from .diagnostics import CatError, CompileError
 from .vocab import shown
 from ..core.cattypes import (BOOL, BY_NAME, ERR, I32, I64, STR, U8, U16, U32, U64,
-                             VOID, array_of, max_of, min_of)
+                             NIL, Type, VOID, array_of, esize, max_of, min_of)
 
 ARITH = {"+", "-", "*", "/", "%"}
 SHIFT = {"<<", ">>"}
@@ -12,7 +14,7 @@ EQ = {"==", "!="}
 ORD = {"<", "<=", ">", ">="}
 PEEK = {"look8": U8, "look16": U16, "look32": U32, "look64": U64}
 POKE = {"bat8": U8, "bat16": U16, "bat32": U32, "bat64": U64}
-BUILTINS = {"meow", "mew", "claw", "ask", "heard", "roll", "stretch", "scribble", "listen"} | set(PEEK) | set(POKE)
+BUILTINS = {"meow", "mew", "claw", "ask", "heard", "roll", "stretch", "scribble", "listen", "bury"} | set(PEEK) | set(POKE)
 
 
 def is_lit(e):
@@ -25,12 +27,28 @@ def is_lit(e):
     return False
 
 
+@dataclass
+class StructInfo:
+    name: str
+    type: Type
+    fields: list      # (имя, тип, смещение)
+    size: int = 0
+
+
 class Checker:
-    def __init__(self, funcs, sources):
+    def __init__(self, funcs, sources, structs=()):
         self.funcs, self.sources, self.errors = {}, sources, []
         self.file = None
+        self.structs, self.struct_decls = {}, list(structs)
+        for sd in self.struct_decls:  # шаг 1: регистрируем имена (структуры могут ссылаться друг на друга)
+            if sd.name in BY_NAME or sd.name in self.structs:
+                self.error(f"type '{sd.name}' is defined twice or is a built-in type", sd, sd.file)
+            else:
+                self.structs[sd.name] = StructInfo(sd.name, Type(sd.name, 32, False, 254, ref="struct"), [])
         for f in funcs:
-            if f.name in self.funcs:
+            if f.name in self.structs:
+                self.error(f"'{f.name}' is already used as a structure name", f, f.file)
+            elif f.name in self.funcs:
                 self.error(f"function '{f.name}' is defined twice", f, f.file)
             elif f.name.split(".")[-1] in BUILTINS:
                 self.error(f"'{f.name}' is a built-in name", f, f.file)
@@ -47,12 +65,33 @@ class Checker:
             inner = self.resolve(ref.elem)
             return ERR if inner is ERR else array_of(inner)
         t = BY_NAME.get(ref.name)
+        if t is None and ref.name in self.structs:
+            return self.structs[ref.name].type
         if t is None:
             self.error(f"unknown type '{ref.name}'", ref)
             return ERR
         return t
 
+    def layout(self):
+        """Шаг 2: поля структур. Каждое поле выровнено по своему размеру, размер объекта кратен 8."""
+        for sd in self.struct_decls:
+            info = self.structs.get(sd.name)
+            if info is None or info.fields:
+                continue
+            self.file, off, seen = sd.file, 0, set()
+            for p in sd.fields:
+                ft = self.resolve(p.type)
+                if p.name in seen:
+                    self.error(f"field '{p.name}' is defined twice", p)
+                seen.add(p.name)
+                sz = esize(ft) if ft is not ERR else 1
+                off = (off + sz - 1) // sz * sz
+                info.fields.append((p.name, ft, off))
+                off += sz
+            info.size = (off + 7) // 8 * 8
+
     def run(self):
+        self.layout()
         for f in self.list:  # сигнатуры
             self.file = f.file
             f.param_types = [self.resolve(p.type) for p in f.params]
@@ -118,7 +157,10 @@ class Checker:
                 self.require(s.init, t)
             else:
                 t = self.expr(s.init, None)
-                if t is VOID:
+                if t is NIL:
+                    self.error(f"cannot infer the type of '{shown('nil')}'; write the type after the name", s.init)
+                    t = ERR
+                elif t is VOID:
                     self.error("cannot store a value of type 'void' in a variable", s.init)
                     t = ERR
             s.slot = self.declare(s.name, t, s)  # объявляем ПОСЛЕ init
@@ -140,6 +182,13 @@ class Checker:
             else:
                 self.error("strings are immutable" if tb is STR else f"cannot index a value of type '{tb}'", s)
                 self.expr(s.value, None)
+        elif isinstance(s, A.FieldAssign):
+            ft = self.field_of(s, s.base, s.name)
+            if ft is ERR:
+                self.expr(s.value, None)
+            else:
+                s.fty = ft
+                self.require(s.value, ft)
         elif isinstance(s, A.If):
             self.require(s.cond, BOOL)
             self.block(s.then)
@@ -248,6 +297,10 @@ class Checker:
             return dst
         if isinstance(e, A.Binary):
             return self.binary(e, hint)
+        if isinstance(e, A.Nil):
+            return hint if hint is not None and hint.ref else NIL
+        if isinstance(e, A.Field):
+            return self.field_of(e, e.base, e.name)
         if isinstance(e, A.Index):
             tb = self.expr(e.base, None)
             self.require(e.index, U32)
@@ -265,6 +318,22 @@ class Checker:
             return self.call(e)
         raise AssertionError(e)
 
+    def field_of(self, node, base, name):
+        """Тип поля `base.name`; записывает смещение в узел."""
+        tb = self.expr(base, None)
+        if tb is ERR:
+            return ERR
+        info = self.structs.get(tb.name) if tb.ref == "struct" else None
+        if info is None:
+            self.error(f"'{tb}' has no fields", node)
+            return ERR
+        for fname, ft, off in info.fields:
+            if fname == name:
+                node.off = off
+                return ft
+        self.error(f"structure '{info.name}' has no field '{name}'", node)
+        return ERR
+
     def array_expr(self, e, hint):
         eh = hint.elem if hint is not None and hint.ref == "array" else None
         if isinstance(e, A.ArrayRepeat):
@@ -279,6 +348,9 @@ class Checker:
             t = self.expr(e.elems[0], eh)
             for el in e.elems[1:]:
                 self.require(el, t)
+        if t is NIL:
+            self.error(f"cannot infer the type of '{shown('nil')}' elements", e)
+            return ERR
         if t is VOID:
             self.error("array elements cannot be 'void'", e)
             return ERR
@@ -301,11 +373,17 @@ class Checker:
             tr = self.expr(r, tl if tl is not ERR else None)
         if ERR in (tl, tr):
             return ERR
+        if tl is NIL and tr.ref:
+            e.left.ty = tl = tr
+        elif tr is NIL and tl.ref:
+            e.right.ty = tr = tl
         if tl is not tr:
             self.error(f"type mismatch: '{tl}' {shown(op)} '{tr}' (use '{shown('as')}' to convert)", e)
             return ERR
         if op in ("&&", "||") and tl is BOOL:
             return BOOL
+        if tl.ref in ("array", "struct") and op in EQ:
+            return BOOL  # сравниваются адреса: «тот же самый объект»
         if tl is STR and op == "+":
             return STR
         if tl is STR and op in EQ:
@@ -327,6 +405,8 @@ class Checker:
         if name == base and base in BUILTINS:
             e.builtin, e.target = True, base
             return self.builtin(e)
+        if name in self.structs:
+            return self.constructor(e, self.structs[name])
         full = name
         if "." not in name and self.cur.module and f"{self.cur.module}.{name}" in self.funcs:
             full = f"{self.cur.module}.{name}"
@@ -345,6 +425,18 @@ class Checker:
             for a, t in zip(e.args, f.param_types):
                 self.require(a, t)
         return f.ret_type
+
+    def constructor(self, e, info):
+        if len(e.args) != len(info.fields):
+            self.error(f"'{info.name}' has {len(info.fields)} field(s), got {len(e.args)} value(s)", e)
+            for a in e.args:
+                self.expr(a, None)
+        else:
+            for a, (_, ft, _) in zip(e.args, info.fields):
+                self.require(a, ft)
+        e.struct, e.tmp = info, self.nslots
+        self.nslots += 1
+        return info.type
 
     def builtin(self, e):
         n, args = e.target, e.args
@@ -376,6 +468,12 @@ class Checker:
         if n == "claw":
             if arity(1):
                 self.require(args[0], BOOL)
+            return VOID
+        if n == "bury":
+            if arity(1):
+                t = self.expr(args[0], None)
+                if not t.ref and t is not ERR:
+                    self.error(f"'bury' needs an array, string or structure, found '{t}'", args[0])
             return VOID
         if n == "stretch":
             if arity(1):

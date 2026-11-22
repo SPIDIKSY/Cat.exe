@@ -34,9 +34,11 @@ OPS = {
     "ALOAD": (0xB0, "ty"), "ASTORE": (0xB1, "ty"), "ALEN": (0xB2, ""), "NEWARR": (0xB3, "ty"),
     "STR": (0xB4, "u16"), "SCAT": (0xB5, ""), "STREQ": (0xB6, ""), "ITOS": (0xB7, ""),
     "READS": (0xB8, ""), "PRINTV": (0xB9, ""), "WRITEV": (0xBA, ""),
+    # структуры и освобождение памяти
+    "NEWS": (0xBB, "u16"), "FLOAD": (0xBC, "tyu16"), "FSTORE": (0xBD, "tyu16"), "FREE": (0xBE, ""),
 }
 BY_OPCODE = {code: (name, fmt) for name, (code, fmt) in OPS.items()}
-SIZE = {"": 1, "ty": 2, "tyimm": 10, "u16": 3, "u32": 5}
+SIZE = {"": 1, "ty": 2, "tyu16": 4, "tyimm": 10, "u16": 3, "u32": 5}
 TERMINATORS = {"RET", "RETV", "JMP", "HALT"}
 JUMPS = {"JMP", "JZ", "JNZ"}
 
@@ -47,6 +49,8 @@ def encode(name, arg, ty):
         return bytes([code])
     if fmt == "ty":
         return bytes([code, ty])
+    if fmt == "tyu16":
+        return struct.pack("<BBH", code, ty, arg)
     if fmt == "tyimm":
         return struct.pack("<BBQ", code, ty, arg & 0xFFFFFFFFFFFFFFFF)
     return struct.pack("<B" + ("H" if fmt == "u16" else "I"), code, arg)
@@ -70,6 +74,9 @@ def decode(code):
         arg = ty = None
         if fmt == "ty":
             ty = code[pc + 1]
+        elif fmt == "tyu16":
+            ty = code[pc + 1]
+            arg = struct.unpack_from("<H", code, pc + 2)[0]
         elif fmt == "tyimm":
             ty = code[pc + 1]
             arg = struct.unpack_from("<Q", code, pc + 2)[0]

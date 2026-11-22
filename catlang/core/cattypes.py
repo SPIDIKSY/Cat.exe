@@ -38,6 +38,7 @@ I64 = Type("i64", 64, True, 8)
 VOID = Type("void", 0, False, 250)
 STR = Type("str", 32, False, 251, ref="str")
 ERR = Type("<error>", 0, False, 252)
+NIL = Type("ghost", 0, False, 249)  # тип литерала `ghost` (пустая ссылка), подстраивается под контекст
 
 TYPES = (BOOL, U8, U16, U32, U64, I8, I16, I32, I64)
 BY_NAME = {t.name: t for t in TYPES}
@@ -53,6 +54,11 @@ def array_of(t):
     if t not in _ARR:
         _ARR[t] = Type(f"[{t.name}]", 32, False, 253, ref="array", elem=t)
     return _ARR[t]
+
+
+def esize(t):
+    """Сколько байт занимает значение типа t в памяти (поле, элемент массива)."""
+    return 1 if t.bits < 8 else t.bits // 8
 
 
 def storage(t):

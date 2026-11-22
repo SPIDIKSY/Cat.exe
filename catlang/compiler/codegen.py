@@ -127,6 +127,10 @@ class Gen:
                 self.emit("RETV", line=ln)
         elif isinstance(s, A.Block):
             self.block(s)
+        elif isinstance(s, A.FieldAssign):
+            self.expr(s.base)
+            self.expr(s.value)
+            self.emit("FSTORE", s.off, storage(s.fty), ln)
         elif isinstance(s, A.IndexAssign):
             self.expr(s.base)
             self.expr(s.index)
@@ -142,6 +146,11 @@ class Gen:
         ln = e.line
         if isinstance(e, (A.IntLit, A.BoolLit)):
             self.emit("PUSH", int(e.value), e.ty, ln)
+        elif isinstance(e, A.Nil):
+            self.emit("PUSH", 0, U32, ln)
+        elif isinstance(e, A.Field):
+            self.expr(e.base)
+            self.emit("FLOAD", e.off, storage(e.ty), ln)
         elif isinstance(e, A.StrLit):
             self.emit("STR", self.const(e.value), line=ln)
         elif isinstance(e, A.Var):
@@ -181,7 +190,7 @@ class Gen:
             self.emit("LABEL", skip)
             self.emit("PUSH", int(e.op == "||"), BOOL, ln)
             self.emit("LABEL", end)
-        elif isinstance(e, A.Binary) and e.left.ty is STR:  # строки: + и ==, !=
+        elif isinstance(e, A.Binary) and e.left.ty is STR and not isinstance(e.left, A.Nil) and not isinstance(e.right, A.Nil):  # строки: + и ==, !=
             self.expr(e.left)
             self.expr(e.right)
             self.emit("SCAT" if e.op == "+" else "STREQ", line=ln)
@@ -191,7 +200,7 @@ class Gen:
             self.expr(e.left)
             self.expr(e.right)
             # для сравнений тип операции — тип операндов
-            self.emit(BIN[e.op], ty=e.left.ty if e.op in CMP else e.ty, line=ln)
+            self.emit(BIN[e.op], ty=storage(e.left.ty) if e.op in CMP else e.ty, line=ln)
         elif isinstance(e, A.Call):
             self.call(e)
         else:
@@ -199,7 +208,15 @@ class Gen:
 
     def call(self, e):
         ln, n = e.line, e.target
-        if not e.builtin:
+        if e.struct is not None:  # конструктор структуры
+            self.emit("NEWS", e.struct.size, line=ln)
+            self.emit("STORE", e.tmp, line=ln)
+            for a, (_, ft, off) in zip(e.args, e.struct.fields):
+                self.emit("LOAD", e.tmp, line=ln)
+                self.expr(a)
+                self.emit("FSTORE", off, storage(ft), ln)
+            self.emit("LOAD", e.tmp, line=ln)
+        elif not e.builtin:
             for a in e.args:
                 self.expr(a)
             self.emit("CALL", self.func_index(n), line=ln)
@@ -218,6 +235,9 @@ class Gen:
             for a in e.args:
                 self.expr(a)
             self.emit({"ask": "READI", "heard": "INOK", "roll": "RAND"}[n], line=ln)
+        elif n == "bury":
+            self.expr(e.args[0])
+            self.emit("FREE", line=ln)
         elif n == "claw":
             self.expr(e.args[0])
             self.emit("ASSERT", line=ln)
