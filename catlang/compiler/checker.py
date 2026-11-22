@@ -5,7 +5,7 @@ from . import ast as A
 from .diagnostics import CatError, CompileError
 from .vocab import shown
 from ..core.cattypes import (BOOL, BY_NAME, ERR, I32, I64, STR, U8, U16, U32, U64,
-                             NIL, Type, VOID, array_of, esize, max_of, min_of)
+                             NIL, Type, VOID, array_of, esize, max_of, min_of, reset_array_types)
 
 ARITH = {"+", "-", "*", "/", "%"}
 SHIFT = {"<<", ">>"}
@@ -37,6 +37,7 @@ class StructInfo:
 
 class Checker:
     def __init__(self, funcs, sources, structs=()):
+        reset_array_types()
         self.funcs, self.sources, self.errors = {}, sources, []
         self.file = None
         self.structs, self.struct_decls = {}, list(structs)

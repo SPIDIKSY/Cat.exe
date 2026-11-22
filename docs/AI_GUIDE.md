@@ -6,7 +6,7 @@ CAT — статически типизированный низкоуровне
 ```
 python -m catlang fmt prog.cat            # привести к единому виду
 python -m catlang check prog.cat --json   # ошибки в JSON: code, line, column, message, source
-python -m catlang wasm prog.cat --html      # в WebAssembly + страница для браузера (пока без массивов/строк-значений/структур)
+python -m catlang wasm prog.cat --html      # в WebAssembly + страница для браузера (весь язык)
 python -m catlang run prog.cat [--seed N] # запуск (код выхода: 0 ок, 1 ошибка компиляции, 3 ошибка выполнения)
 ```
 Правь по `code` и `line`/`column`, перезапускай `check`, пока не будет `"ok": true`. Тесты: `python -m unittest discover -t . -s tests`.

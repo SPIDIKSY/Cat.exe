@@ -61,6 +61,11 @@ def esize(t):
     return 1 if t.bits < 8 else t.bits // 8
 
 
+def reset_array_types():
+    """Забыть созданные типы массивов (новая компиляция = новые типы структур)."""
+    _ARR.clear()
+
+
 def storage(t):
     """Тип, которым значение хранится в памяти/байткоде: ссылки — как u32."""
     return U32 if t.ref else t

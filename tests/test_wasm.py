@@ -126,7 +126,9 @@ class WasmMatchesVM(unittest.TestCase):
         same(self, src)
 
     def test_examples(self):
-        for name, inputs in (("hello", ()), ("fib", ()), ("gates", ()),
+        for name, inputs in (("hello", ()), ("fib", ()), ("gates", ()), ("primes", ()),
+                             ("tictactoe", ("5", "1", "9", "3", "7", "2", "4", "6", "8")),
+                             ("tictactoe", tuple(str(i % 9 + 1) for i in range(40))),
                              ("guess", ("50", "abc", "25", "75", "10", "90", "5")),
                              ("guess", ("1",) * 7)):
             with open(os.path.join(ROOT, "examples", name + ".cat"), encoding="utf-8") as f:
@@ -164,12 +166,11 @@ class WasmTraps(unittest.TestCase):
 
 @unittest.skipUnless(NODE, "Node.js не найден")
 class WasmLimits(unittest.TestCase):
-    def test_unsupported_reported_clearly(self):
+    def test_heap_programs_compile(self):
         for src in ("purr main() { yarn a = [1, 2]; }", 'purr main() { yarn s = "x" + "y"; }',
                     "kit P { x: u8 } purr main() { yarn p = P(1); }", 'purr main() { bury("x"); }'):
-            with self.assertRaises(CompileError, msg=src) as c:
-                compile_wasm_source(src, "t.cat")
-            self.assertIn("WebAssembly backend does not support", c.exception.render())
+            wasm, _ = compile_wasm_source(src, "t.cat")
+            self.assertGreater(len(wasm), 8)
 
     def test_unused_unsupported_functions_are_skipped(self):
         src = "purr unused() { yarn a = [1]; } purr main() { meow(1); }"

@@ -4,13 +4,15 @@
 u64, i64 — i64. Знаковость выбирает вариант команды (lt_s/lt_u, div_s/div_u ...).
 Семантика совпадает с VM: целые оборачиваются, деление на 0 и сдвиг за пределы типа — ловушка,
 INT_MIN / -1 оборачивается (для этого есть вспомогательная функция div).
-Не поддерживается пока: массивы, строки-значения, структуры, ghost, bury, look*/bat* (нужна куча в Wasm).
+Куча (массивы, строки, структуры, bury): данные лежат в памяти Wasm, а учёт объектов (ссылки с поколениями,
+виды, список свободных блоков, проверки границ) ведёт JS-обвязка glue.js по тем же правилам, что и VM.
+Чтение/запись элементов — встроенными командами Wasm после проверки адреса.
 """
 import dataclasses
 
 from ..compiler import ast as A
 from ..compiler.diagnostics import CatError, CompileError
-from ..core.cattypes import BOOL, I64 as I64T, VOID, wrap
+from ..core.cattypes import BOOL, STR, I64 as I64T, VOID, wrap
 from .encode import I32, I64, Module, sleb, uleb
 
 IMPORTS = [
@@ -18,11 +20,19 @@ IMPORTS = [
     ("print_bool", [I32], []), ("write_bool", [I32], []),
     ("print_str", [I32, I32], []), ("write_str", [I32, I32], []),
     ("roll", [I32], [I32]), ("ask", [], [I64]), ("heard", [], [I32]),
+    # куча
+    ("new_arr", [I64, I32, I32], [I32]), ("new_struct", [I32], [I32]),
+    ("aaddr_r", [I32, I32, I32], [I32]), ("aaddr_w", [I32, I32, I32], [I32]), ("faddr", [I32, I32, I32], [I32]),
+    ("alen", [I32], [I32]), ("free", [I32], []), ("str_lit", [I32, I32], [I32]),
+    ("scat", [I32, I32], [I32]), ("streq", [I32, I32], [I32]), ("itos", [I64, I32], [I32]),
+    ("reads", [], [I32]), ("print_v", [I32], []), ("write_v", [I32], []), ("uaddr", [I32, I32], [I32]),
 ]
 IMP = {n: i for i, (n, _, _) in enumerate(IMPORTS)}
 HELPERS = ["div32", "div64", "shl32", "shr_s32", "shr_u32", "shl64", "shr_s64", "shr_u64"]
 HELP = {n: len(IMPORTS) + i for i, n in enumerate(HELPERS)}
-DATA_START = 1024
+HEAP_END = 4 * 1024 * 1024  # конец кучи; строковые константы лежат выше, в одной странице
+DATA_START = HEAP_END
+PAGES = HEAP_END // 65536 + 1
 
 # коды команд
 OP32 = {"eqz": 0x45, "eq": 0x46, "ne": 0x47, "lt_s": 0x48, "lt_u": 0x49, "gt_s": 0x4A, "gt_u": 0x4B,
@@ -46,7 +56,9 @@ def wide(t):
 
 
 def valtype(t, node=None):
-    if t.ref or t.bits == 0:
+    if t.ref:
+        return I32  # ссылка на объект кучи — u32
+    if t.bits == 0:
         raise Unsupported(node, f"values of type '{t}'")
     return I64 if wide(t) else I32
 
@@ -115,6 +127,35 @@ class FuncGen:
 
     def call(self, idx):
         self.out += b"\x10" + uleb(idx)
+
+    def imp(self, name):
+        self.call(IMP[name])
+
+    def i32c(self, v):
+        self.out += b"\x41" + sleb(v)
+
+    def load(self, t):
+        """Прочитать из памяти значение типа t (адрес на стеке)."""
+        if wide(t):
+            opc = 0x29
+        elif t.ref or t.bits == 32:
+            opc = 0x28
+        elif t.bits == 16:
+            opc = 0x2E if t.signed else 0x2F
+        else:
+            opc = 0x2C if t.signed else 0x2D  # 8 бит и bool
+        self.b(opc, 0, 0)
+
+    def store(self, t):
+        """Записать в память (адрес, значение на стеке)."""
+        self.b(0x37 if wide(t) else 0x36 if (t.ref or t.bits == 32) else 0x3B if t.bits == 16 else 0x3A, 0, 0)
+
+    def to_i64(self, t):
+        if not wide(t):
+            self.b(0xAC if t.signed and not t.ref else 0xAD)
+
+    def esz(self, t):
+        return 1 if t.bits < 8 else t.bits // 8
 
     def local(self, kind, slot):
         self.out += bytes([kind]) + uleb(slot)
@@ -206,8 +247,23 @@ class FuncGen:
             self.expr(s.expr)
             if s.expr.ty is not VOID:
                 self.b(0x1A)
+        elif isinstance(s, A.IndexAssign):
+            et = s.value.ty
+            self.expr(s.base)
+            self.expr(s.index)
+            self.i32c(self.esz(et))
+            self.imp("aaddr_w")
+            self.expr(s.value)
+            self.store(et)
+        elif isinstance(s, A.FieldAssign):
+            self.expr(s.base)
+            self.i32c(s.off)
+            self.i32c(self.esz(s.fty))
+            self.imp("faddr")
+            self.expr(s.value)
+            self.store(s.fty)
         else:
-            raise Unsupported(s, "array or structure element assignment")
+            raise Unsupported(s, "this statement")
 
     # --- выражения ---
     def expr(self, e):
@@ -236,9 +292,49 @@ class FuncGen:
             self.binary(e)
         elif isinstance(e, A.Call):
             self.call_expr(e)
+        elif isinstance(e, A.StrLit):
+            ptr, ln = self.gen.string(e.value)
+            self.i32c(ptr)
+            self.i32c(ln)
+            self.imp("str_lit")
+        elif isinstance(e, A.Nil):
+            self.i32c(0)
+        elif isinstance(e, A.Index):
+            self.expr(e.base)
+            self.expr(e.index)
+            self.i32c(self.esz(e.ty))
+            self.imp("aaddr_r")
+            self.load(e.ty)
+        elif isinstance(e, A.Field):
+            self.expr(e.base)
+            self.i32c(e.off)
+            self.i32c(self.esz(e.ty))
+            self.imp("faddr")
+            self.load(e.ty)
+        elif isinstance(e, A.ArrayRepeat):
+            et = e.value.ty
+            self.expr(e.value)
+            self.to_i64(et)
+            self.expr(e.count)
+            self.i32c(self.esz(et))
+            self.imp("new_arr")
+        elif isinstance(e, A.ArrayLit):
+            et = e.ty.elem
+            self.b(0x42, 0)
+            self.i32c(len(e.elems))
+            self.i32c(self.esz(et))
+            self.imp("new_arr")
+            self.local(0x21, e.tmp)
+            for i, el in enumerate(e.elems):
+                self.local(0x20, e.tmp)
+                self.i32c(i)
+                self.i32c(self.esz(et))
+                self.imp("aaddr_w")
+                self.expr(el)
+                self.store(et)
+            self.local(0x20, e.tmp)
         else:
-            raise Unsupported(e, {"StrLit": "strings as values", "Nil": "'ghost'", "Field": "structures",
-                                  "Index": "arrays", "ArrayLit": "arrays", "ArrayRepeat": "arrays"}[type(e).__name__])
+            raise Unsupported(e, "this expression")
 
     def cast(self, e):
         src, dst = e.operand.ty, e.ty
@@ -265,6 +361,17 @@ class FuncGen:
                 self.expr(e.right)
             self.ctl.pop()
             self.b(0x0B)
+            return
+        if e.left.ty.ref:
+            nil = isinstance(e.left, A.Nil) or isinstance(e.right, A.Nil)
+            self.expr(e.left)
+            self.expr(e.right)
+            if e.left.ty is STR and not nil:  # строки: содержимое
+                self.imp("scat" if op == "+" else "streq")
+                if op == "!=":
+                    self.b(0x45)
+            else:  # массивы, структуры, ghost: тот же ли объект
+                self.b(OP32["eq" if op == "==" else "ne"])
             return
         self.expr(e.left)
         self.expr(e.right)
@@ -294,8 +401,19 @@ class FuncGen:
                 self.norm(t)
 
     def call_expr(self, e):
-        if e.struct is not None:
-            raise Unsupported(e, "structures")
+        if e.struct is not None:  # конструктор структуры
+            self.i32c(e.struct.size)
+            self.imp("new_struct")
+            self.local(0x21, e.tmp)
+            for a, (_, ft, off) in zip(e.args, e.struct.fields):
+                self.local(0x20, e.tmp)
+                self.i32c(off)
+                self.i32c(self.esz(ft))
+                self.imp("faddr")
+                self.expr(a)
+                self.store(ft)
+            self.local(0x20, e.tmp)
+            return
         if not e.builtin:
             for a in e.args:
                 self.expr(a)
@@ -313,7 +431,8 @@ class FuncGen:
                 self.expr(a)
                 self.call(IMP[pre + "_bool"])
             elif a.ty.ref:
-                raise Unsupported(a, "printing strings that are values")
+                self.expr(a)
+                self.imp(pre + "_v")
             else:
                 self.expr(a)
                 if not wide(a.ty):
@@ -329,6 +448,33 @@ class FuncGen:
             self.call(IMP["ask"])
         elif n == "heard":
             self.call(IMP["heard"])
+        elif n == "stretch":
+            self.expr(e.args[0])
+            self.imp("alen")
+        elif n == "scribble":
+            t = e.args[0].ty
+            self.expr(e.args[0])
+            self.to_i64(t)
+            self.i32c(0 if t.signed else 1)
+            self.imp("itos")
+        elif n == "listen":
+            self.imp("reads")
+        elif n == "bury":
+            self.expr(e.args[0])
+            self.imp("free")
+        elif n.startswith("look"):
+            t = e.ty
+            self.expr(e.args[0])
+            self.i32c(self.esz(t))
+            self.imp("uaddr")
+            self.load(t)
+        elif n.startswith("bat"):
+            t = e.args[1].ty
+            self.expr(e.args[0])
+            self.i32c(self.esz(t))
+            self.imp("uaddr")
+            self.expr(e.args[1])
+            self.store(t)
         else:
             raise Unsupported(e, f"the built-in '{n}'")
 
@@ -361,7 +507,7 @@ class Gen:
 
     def build(self):
         self.reach()
-        m = Module()
+        m = Module(PAGES)
         for name, ps, rs in IMPORTS:
             m.add_import("env", name, ps, rs)
         _helpers(m)
@@ -376,6 +522,8 @@ class Gen:
                         types[node.slot] = valtype(node.init.ty, node)
                     elif isinstance(node, A.For):
                         types[node.slot] = types[node.endslot] = valtype(node.ty, node)
+                    elif isinstance(node, A.ArrayLit) or (isinstance(node, A.Call) and node.struct is not None):
+                        types[node.tmp] = I32
                 locals_ = [types.get(i, I32) for i in range(len(params), f.nlocals)]
                 g = FuncGen(self, f)
                 g.block(f.body)

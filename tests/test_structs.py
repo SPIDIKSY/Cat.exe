@@ -165,6 +165,12 @@ class Errors(unittest.TestCase):
         self.has(main("yarn p = P(1, 2); meow(p < p);", self.P), "cannot be applied")
         self.has(main("yarn p = P(1, 2); meow(p);", self.P), "cannot print")
 
+    def test_compiling_twice_in_one_process(self):
+        # кэш типов массивов не должен держать структуры прошлой компиляции
+        src = "kit P { x: u8 } purr main() { yarn a: [P] = [P(1), ghost]; meow(a[0].x); }"
+        self.assertEqual(out(src), "1\n")
+        self.assertEqual(out(src), "1\n")
+
     def test_module_call_still_works(self):
         self.assertEqual(out("adopt math; purr main() { yarn p = 12; meow(math.gcd(12, 18)); }"), "6\n")
 

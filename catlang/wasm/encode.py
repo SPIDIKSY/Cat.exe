@@ -42,8 +42,9 @@ def section(sid, body):
 class Module:
     """Сборка модуля: типы, импорты, функции, память, экспорты, данные."""
 
-    def __init__(self):
+    def __init__(self, pages=1):
         self.types, self.imports, self.funcs, self.exports, self.data = [], [], [], [], []
+        self.pages = pages  # размер памяти в страницах по 64 КиБ
 
     def type_index(self, params, results):
         t = (tuple(params), tuple(results))
@@ -68,7 +69,7 @@ class Module:
                                for ps, rs in self.types]))
         out += section(2, vec([name(m) + name(f) + b"\x00" + uleb(t) for m, f, t in self.imports]))
         out += section(3, vec([uleb(t) for t, _, _ in self.funcs]))
-        out += section(5, vec([b"\x00" + uleb(1)]))  # одна страница памяти (64 КиБ)
+        out += section(5, vec([b"\x00" + uleb(self.pages)]))
         out += section(7, vec([name(n) + bytes([kind]) + uleb(i) for n, kind, i in self.exports]))
         bodies = []
         for _, locals_, body in self.funcs:
