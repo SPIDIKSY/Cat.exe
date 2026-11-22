@@ -22,6 +22,8 @@ python -m catlang run examples/guess.cat           # игра «Угадай ч�
 python -m catlang run examples/tictactoe.cat       # крестики-нолики против котика
 python -m catlang check examples/hello.cat --json  # только проверка, ошибки в JSON
 python -m catlang fmt examples/hello.cat         # единый стиль кода
+python -m catlang wasm examples/guess.cat --html    # WebAssembly + страница для браузера (guess.html)
+node tools/run_wasm.js examples/guess.wasm        # запуск .wasm в Node.js
 python -m catlang logic                           # таблицы истинности + самопроверка
 python -m unittest discover -t . -s tests         # тесты
 ```

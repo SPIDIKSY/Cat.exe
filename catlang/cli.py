@@ -3,7 +3,7 @@ import argparse
 
 from . import __version__
 from .compiler.diagnostics import CompileError
-from .compiler.driver import compile_file
+from .compiler.driver import compile_file, compile_wasm_source
 from .compiler.formatter import format_source
 from .core import logic as L
 from .core.alu import GateALU
@@ -40,6 +40,42 @@ def cmd_build(a):
     data = fmt.to_bytes(prog)
     host.write_bytes(out, data)
     host.write_out(f"{out}: {len(data)} bytes ({'stripped' if a.strip else 'with debug info'})\n")
+    return 0
+
+
+HTML = """<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CAT: %(title)s</title>
+<style>body{font:16px/1.4 system-ui,sans-serif;margin:16px;background:#fff;color:#111}
+pre{background:#f4f4f4;padding:12px;border-radius:8px;white-space:pre-wrap}
+@media(prefers-color-scheme:dark){body{background:#161616;color:#eee}pre{background:#252525}}</style></head>
+<body><h1>CAT: %(title)s</h1><pre id="out"></pre>
+<script>
+%(glue)s
+const bytes = Uint8Array.from(atob("%(b64)s"), c => c.charCodeAt(0));
+const out = document.getElementById("out");
+catRun(bytes, { write: s => { out.textContent += s; },
+  readLine: () => { const v = prompt("Ввод (отмена = конец ввода):"); return v === null ? null : v; },
+  seed: BigInt(Math.floor(Math.random() * 2 ** 52) + 1) })
+  .then(c => { out.textContent += "\\n[программа завершена, код " + c + "]"; })
+  .catch(e => { out.textContent += "\\nruntime error: " + e.message; });
+</script></body></html>
+"""
+
+
+def cmd_wasm(a):
+    import base64
+    import os
+    wasm, _ = compile_wasm_source(host.read_text(a.file), a.file)
+    base = a.output or (a.file[:-4] if a.file.endswith(".cat") else a.file) + ".wasm"
+    host.write_bytes(base, wasm)
+    host.write_out(f"{base}: {len(wasm)} bytes (WebAssembly)\n")
+    if a.html:
+        glue = host.read_text(os.path.join(os.path.dirname(__file__), "wasm", "glue.js"))
+        page = HTML % {"title": os.path.basename(a.file), "glue": glue, "b64": base64.b64encode(wasm).decode()}
+        html = base[:-5] + ".html" if base.endswith(".wasm") else base + ".html"
+        host.write_bytes(html, page.encode("utf-8"))
+        host.write_out(f"{html}: страница для браузера\n")
     return 0
 
 
@@ -118,11 +154,16 @@ def main(argv=None):
     f.add_argument("--check", action="store_true", help="не менять файл, только проверить")
     for p in (r, b, c):
         p.add_argument("--json", action="store_true", help="ошибки компиляции в формате JSON (для программ и ИИ)")
+    w = sub.add_parser("wasm", help="скомпилировать в WebAssembly (.wasm)")
+    w.add_argument("file")
+    w.add_argument("-o", "--output")
+    w.add_argument("--html", action="store_true", help="ещё и готовая страница для браузера")
+    w.add_argument("--json", action="store_true", help="ошибки компиляции в формате JSON")
     d = sub.add_parser("disasm", help="показать байткод")
     d.add_argument("file")
     sub.add_parser("logic", help="таблицы истинности и самопроверка логического ядра")
     a = ap.parse_args(argv)
-    fn = {"run": cmd_run, "build": cmd_build, "check": cmd_check, "fmt": cmd_fmt,
+    fn = {"run": cmd_run, "build": cmd_build, "check": cmd_check, "fmt": cmd_fmt, "wasm": cmd_wasm,
           "disasm": cmd_disasm, "logic": cmd_logic}[a.cmd]
     try:
         return fn(a)
