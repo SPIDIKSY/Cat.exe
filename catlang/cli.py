@@ -3,7 +3,7 @@ import argparse
 
 from . import __version__
 from .compiler.diagnostics import CompileError
-from .compiler.driver import compile_file, compile_wasm_source
+from .compiler.driver import compile_file, compile_native_source, compile_wasm_source
 from .compiler.formatter import format_source
 from .core import logic as L
 from .core.alu import GateALU
@@ -76,6 +76,26 @@ def cmd_wasm(a):
         html = base[:-5] + ".html" if base.endswith(".wasm") else base + ".html"
         host.write_bytes(html, page.encode("utf-8"))
         host.write_out(f"{html}: страница для браузера\n")
+    return 0
+
+
+def host_target():
+    import sys
+    return {"win32": "windows", "darwin": "macos"}.get(sys.platform, "linux")
+
+
+def cmd_exe(a):
+    import os
+    target = a.target or host_target()
+    data = compile_native_source(host.read_text(a.file), a.file, target, a.seed)
+    base = a.output or (a.file[:-4] if a.file.endswith(".cat") else a.file) + (".exe" if target == "windows" else "")
+    host.write_bytes(base, data)
+    try:
+        if target != "windows":
+            os.chmod(base, 0o755)
+    except OSError:
+        pass
+    host.write_out(f"{base}: {len(data)} bytes ({target}, x86-64)\n")
     return 0
 
 
@@ -159,11 +179,17 @@ def main(argv=None):
     w.add_argument("-o", "--output")
     w.add_argument("--html", action="store_true", help="ещё и готовая страница для браузера")
     w.add_argument("--json", action="store_true", help="ошибки компиляции в формате JSON")
+    x = sub.add_parser("exe", help="скомпилировать в исполняемый файл (linux | windows | macos, x86-64)")
+    x.add_argument("file")
+    x.add_argument("-o", "--output")
+    x.add_argument("--target", choices=("linux", "windows", "macos"), help="для какой ОС (по умолчанию — текущая)")
+    x.add_argument("--seed", type=int, default=None, help="зафиксировать начальное число для roll() (по умолчанию — от времени)")
+    x.add_argument("--json", action="store_true", help="ошибки компиляции в формате JSON")
     d = sub.add_parser("disasm", help="показать байткод")
     d.add_argument("file")
     sub.add_parser("logic", help="таблицы истинности и самопроверка логического ядра")
     a = ap.parse_args(argv)
-    fn = {"run": cmd_run, "build": cmd_build, "check": cmd_check, "fmt": cmd_fmt, "wasm": cmd_wasm,
+    fn = {"run": cmd_run, "build": cmd_build, "check": cmd_check, "fmt": cmd_fmt, "wasm": cmd_wasm, "exe": cmd_exe,
           "disasm": cmd_disasm, "logic": cmd_logic}[a.cmd]
     try:
         return fn(a)

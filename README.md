@@ -24,6 +24,7 @@ python -m catlang check examples/hello.cat --json  # только проверк
 python -m catlang fmt examples/hello.cat         # единый стиль кода
 python -m catlang wasm examples/guess.cat --html    # WebAssembly + страница для браузера (guess.html)
 node tools/run_wasm.js examples/guess.wasm        # запуск .wasm в Node.js
+python -m catlang exe examples/hello.cat --target windows   # hello.exe для Windows (также macos, linux)
 python -m catlang logic                           # таблицы истинности + самопроверка
 python -m unittest discover -t . -s tests         # тесты
 ```

@@ -33,6 +33,9 @@ def same(test, src, inputs=(), seed=1):
 
 @unittest.skipUnless(NODE, "Node.js не найден")
 class WasmMatchesVM(unittest.TestCase):
+    def same(self, src, inputs=(), seed=1):
+        same(self, src, inputs, seed)
+
     TYPES = [("u8", 8, False), ("u16", 16, False), ("u32", 32, False), ("u64", 64, False),
              ("i8", 8, True), ("i16", 16, True), ("i32", 32, True), ("i64", 64, True)]
 
@@ -69,7 +72,7 @@ class WasmMatchesVM(unittest.TestCase):
                 for b in amounts:
                     body.append(f"meow(sl({a}, {b})); meow(sr({a}, {b}));")
             src = "\n".join(fns) + "\npurr main() {\n" + "\n".join(body) + "\n}\n"
-            same(self, src)
+            self.same(src)
 
     def test_casts_between_all_types(self):
         names = [n for n, _, _ in self.TYPES]
@@ -80,7 +83,7 @@ class WasmMatchesVM(unittest.TestCase):
                 for b in names:
                     body.append(f"meow(c_{a}_{b}({v}));")
         body.append("meow(yes like u8); meow(no like i64);")
-        same(self, "\n".join(fns) + "\npurr main() {\n" + "\n".join(body) + "\n}\n")
+        self.same("\n".join(fns) + "\npurr main() {\n" + "\n".join(body) + "\n}\n")
 
     def test_control_flow(self):
         src = """
@@ -107,7 +110,7 @@ class WasmMatchesVM(unittest.TestCase):
             chase yes { i = i + 1; sniff i < 5 { hop; } scat; }
             meow(i);
         }"""
-        same(self, src)
+        self.same(src)
 
     def test_nested_ifs_and_early_return(self):
         src = """
@@ -119,11 +122,11 @@ class WasmMatchesVM(unittest.TestCase):
             bring 999;
         }
         purr main() { meow(sign(-5)); meow(sign(0)); meow(sign(9)); meow(find(100)); meow(find(3)); }"""
-        same(self, src)
+        self.same(src)
 
     def test_exit_code_and_u64_printing(self):
         src = "purr main() -> i32 { yarn m: u64 = 18446744073709551615; meow(m); meow(-9223372036854775807 - 1); bring 44; }"
-        same(self, src)
+        self.same(src)
 
     def test_examples(self):
         for name, inputs in (("hello", ()), ("fib", ()), ("gates", ()), ("primes", ()),
@@ -134,10 +137,10 @@ class WasmMatchesVM(unittest.TestCase):
             with open(os.path.join(ROOT, "examples", name + ".cat"), encoding="utf-8") as f:
                 src = f.read()
             for seed in (3, 11):
-                same(self, src, inputs, seed)
+                self.same(src, inputs, seed)
 
     def test_roll_same_generator(self):
-        same(self, "purr main() { prowl i among 0..50 { meow(roll(1000)); } }", seed=12345)
+        self.same("purr main() { prowl i among 0..50 { meow(roll(1000)); } }", seed=12345)
 
 
 @unittest.skipUnless(NODE, "Node.js не найден")

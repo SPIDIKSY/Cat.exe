@@ -235,6 +235,9 @@ class Gen:
             for a in e.args:
                 self.expr(a)
             self.emit({"ask": "READI", "heard": "INOK", "roll": "RAND"}[n], line=ln)
+        elif n.startswith("__"):
+            from .diagnostics import CatError, CompileError
+            raise CompileError([CatError(f"{n} is only available in native programs", e.line, e.col)], {})
         elif n == "bury":
             self.expr(e.args[0])
             self.emit("FREE", line=ln)

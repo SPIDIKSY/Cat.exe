@@ -1,0 +1,111 @@
+// Рантайм нативных программ CAT: печать, ввод, random. Написан на самом CAT.
+// Использует служебные функции __write/__read/__trap/__mem (только для рантайма).
+// Память рантайма — над пользовательской областью: 65536.. (rng, состояние ввода, буферы).
+
+// 65536: состояние rng (u64) · 65544: прошлый ввод был числом · 65552/65560: позиция/конец буфера ввода
+// 65600..65640: буфер для печати чисел · 66000..70096: буфер ввода
+
+purr print_num(v: u64, neg: bool, nl: bool) {
+    yarn pos: u32 = 65640;
+    sniff nl { pos = pos - 1; bat8(pos, 10); }
+    yarn first = yes;
+    chase first || v != 0 {
+        first = no;
+        pos = pos - 1;
+        bat8(pos, (48 + v % 10) like u8);
+        v = v / 10;
+    }
+    sniff neg { pos = pos - 1; bat8(pos, 45); }
+    __write(1, __mem() + (pos like u64), (65640 - pos) like u64);
+}
+
+purr print_u64(v: u64, nl: bool) { print_num(v, no, nl); }
+
+purr print_i64(v: i64, nl: bool) {
+    sniff v < 0 { print_num(0 - (v like u64), yes, nl); } hiss { print_num(v like u64, no, nl); }
+}
+
+purr print_bool(b: bool, nl: bool) {
+    yarn pos: u32 = 65600;
+    sniff b {
+        bat8(pos, 116); bat8(pos + 1, 114); bat8(pos + 2, 117); bat8(pos + 3, 101);
+        pos = pos + 4;
+    } hiss {
+        bat8(pos, 102); bat8(pos + 1, 97); bat8(pos + 2, 108); bat8(pos + 3, 115); bat8(pos + 4, 101);
+        pos = pos + 5;
+    }
+    sniff nl { bat8(pos, 10); pos = pos + 1; }
+    __write(1, __mem() + 65600, (pos - 65600) like u64);
+}
+
+purr print_str(p: u64, n: u64, nl: bool) {
+    __write(1, p, n);
+    sniff nl { bat8(65600, 10); __write(1, __mem() + 65600, 1); }
+}
+
+purr do_roll(n: u32) -> u32 {
+    sniff n == 0 { __trap(5); }
+    yarn x: u64 = look64(65536);
+    x = x S (x << 13);
+    x = x S (x >> 7);
+    x = x S (x << 17);
+    bat64(65536, x);
+    bring (x % (n like u64)) like u32;
+}
+
+// один байт ввода или -1 (конец ввода)
+purr getc() -> i64 {
+    yarn p: u64 = look64(65552);
+    yarn e: u64 = look64(65560);
+    sniff p >= e {
+        yarn n = __read(0, __mem() + 66000, 4096);
+        sniff n <= 0 { bring -1; }
+        e = n like u64;
+        p = 0;
+        bat64(65560, e);
+    }
+    yarn c = look8((66000 + p) like u32);
+    bat64(65552, p + 1);
+    bring c like i64;
+}
+
+// читает строку, разбирает число так же, как виртуальная машина:
+// пробелы по краям можно, один знак в начале, только цифры, влезает в i64; иначе 0 и heard() == no
+purr do_ask() -> i64 {
+    yarn c = getc();
+    sniff c < 0 { __trap(6); }
+    yarn neg = no;
+    yarn seen = no;
+    yarn ended = no;
+    yarn bad = no;
+    yarn digits: u32 = 0;
+    yarn val: u64 = 0;
+    chase c >= 0 && c != 10 {
+        sniff c == 32 || c == 9 || c == 13 {
+            sniff seen { ended = yes; }
+        } hiss sniff ended {
+            bad = yes;
+        } hiss sniff c == 43 || c == 45 {
+            sniff seen { bad = yes; } hiss { seen = yes; neg = c == 45; }
+        } hiss sniff c >= 48 && c <= 57 {
+            seen = yes;
+            digits = digits + 1;
+            yarn d = (c - 48) like u64;
+            yarn limit: u64 = 9223372036854775807;
+            sniff neg { limit = limit + 1; }
+            sniff val > (limit - d) / 10 { bad = yes; } hiss { val = val * 10 + d; }
+        } hiss {
+            bad = yes;
+        }
+        c = getc();
+    }
+    sniff bad || digits == 0 {
+        bat64(65544, 0);
+        bring 0;
+    }
+    bat64(65544, 1);
+    sniff neg { bring (0 - val) like i64; }
+    bring val like i64;
+}
+
+purr do_heard() -> bool { bring look64(65544) != 0; }

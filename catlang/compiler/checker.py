@@ -14,7 +14,8 @@ EQ = {"==", "!="}
 ORD = {"<", "<=", ">", ">="}
 PEEK = {"look8": U8, "look16": U16, "look32": U32, "look64": U64}
 POKE = {"bat8": U8, "bat16": U16, "bat32": U32, "bat64": U64}
-BUILTINS = {"meow", "mew", "claw", "ask", "heard", "roll", "stretch", "scribble", "listen", "bury"} | set(PEEK) | set(POKE)
+INTRINSICS = {"__write", "__read", "__exit", "__mem", "__rdtsc", "__trap"}  # только для рантайма (stdlib/rt.cat)
+BUILTINS = {"meow", "mew", "claw", "ask", "heard", "roll", "stretch", "scribble", "listen", "bury"} | INTRINSICS | set(PEEK) | set(POKE)
 
 
 def is_lit(e):
@@ -470,6 +471,13 @@ class Checker:
             if arity(1):
                 self.require(args[0], BOOL)
             return VOID
+        if n in INTRINSICS:
+            sig = {"__write": ([I64, U64, U64], I64), "__read": ([I64, U64, U64], I64), "__exit": ([I64], VOID),
+                   "__mem": ([], U64), "__rdtsc": ([], U64), "__trap": ([I64], VOID)}[n]
+            if arity(len(sig[0])):
+                for a, t in zip(args, sig[0]):
+                    self.require(a, t)
+            return sig[1]
         if n == "bury":
             if arity(1):
                 t = self.expr(args[0], None)
