@@ -4,6 +4,7 @@ import argparse
 from . import __version__
 from .compiler.diagnostics import CompileError
 from .compiler.driver import compile_file
+from .compiler.formatter import format_source
 from .core import logic as L
 from .core.alu import GateALU
 from .platform import host
@@ -39,6 +40,29 @@ def cmd_build(a):
     data = fmt.to_bytes(prog)
     host.write_bytes(out, data)
     host.write_out(f"{out}: {len(data)} bytes ({'stripped' if a.strip else 'with debug info'})\n")
+    return 0
+
+
+def cmd_check(a):
+    compile_file(a.file)
+    if a.json:
+        host.write_out('{"ok": true, "errors": []}\n')
+    else:
+        host.write_out(f"{a.file}: ok\n")
+    return 0
+
+
+def cmd_fmt(a):
+    old = host.read_text(a.file)
+    new = format_source(old)
+    if a.check:
+        if new != old:
+            host.write_err(f"{a.file}: needs formatting\n")
+            return 1
+        return 0
+    if new != old:
+        host.write_bytes(a.file, new.encode("utf-8"))
+        host.write_out(f"{a.file}: formatted\n")
     return 0
 
 
@@ -87,15 +111,23 @@ def main(argv=None):
     b.add_argument("file")
     b.add_argument("-o", "--output")
     b.add_argument("--strip", action="store_true", help="без отладочной информации (релиз)")
+    c = sub.add_parser("check", help="только проверить программу (без запуска)")
+    c.add_argument("file")
+    f = sub.add_parser("fmt", help="привести код к единому виду")
+    f.add_argument("file")
+    f.add_argument("--check", action="store_true", help="не менять файл, только проверить")
+    for p in (r, b, c):
+        p.add_argument("--json", action="store_true", help="ошибки компиляции в формате JSON (для программ и ИИ)")
     d = sub.add_parser("disasm", help="показать байткод")
     d.add_argument("file")
     sub.add_parser("logic", help="таблицы истинности и самопроверка логического ядра")
     a = ap.parse_args(argv)
-    fn = {"run": cmd_run, "build": cmd_build, "disasm": cmd_disasm, "logic": cmd_logic}[a.cmd]
+    fn = {"run": cmd_run, "build": cmd_build, "check": cmd_check, "fmt": cmd_fmt,
+          "disasm": cmd_disasm, "logic": cmd_logic}[a.cmd]
     try:
         return fn(a)
     except CompileError as e:
-        host.write_err(e.render() + "\n")
+        host.write_err((e.to_json() if getattr(a, "json", False) else e.render()) + "\n")
         return EXIT_COMPILE
     except fmt.FormatError as e:
         host.write_err(f"bad bytecode file: {e}\n")

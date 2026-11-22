@@ -20,6 +20,8 @@ python -m catlang run examples/fib.catc
 python -m catlang disasm examples/fib.cat         # посмотреть байткод
 python -m catlang run examples/guess.cat           # игра «Угадай число»
 python -m catlang run examples/tictactoe.cat       # крестики-нолики против котика
+python -m catlang check examples/hello.cat --json  # только проверка, ошибки в JSON
+python -m catlang fmt examples/hello.cat         # единый стиль кода
 python -m catlang logic                           # таблицы истинности + самопроверка
 python -m unittest discover -t . -s tests         # тесты
 ```
@@ -40,4 +42,4 @@ purr main() {
 Слова языка — кошачьи (`purr` функция, `yarn` переменная, `sniff` если, `chase` пока, `meow` печать…),
 четыре логические операции — буквы `C A T S`. Полная таблица: [docs/GRAMMAR.md](docs/GRAMMAR.md).
 
-Документы: [DESIGN](docs/DESIGN.md) · [GRAMMAR](docs/GRAMMAR.md) · [BYTECODE](docs/BYTECODE.md).
+Документы: [AI_GUIDE (шпаргалка для ИИ)](docs/AI_GUIDE.md) · [DESIGN](docs/DESIGN.md) · [GRAMMAR](docs/GRAMMAR.md) · [BYTECODE](docs/BYTECODE.md).
